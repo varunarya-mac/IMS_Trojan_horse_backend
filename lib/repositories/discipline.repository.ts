@@ -9,6 +9,7 @@ import { COLLECTION_IDS, type DisciplineEntity, type DisciplineTypeEntity } from
 import type { DisciplineDTO, DisciplineTypeDTO } from '../types/dtos.js';
 import { getDatabases, getDatabaseId, generateId } from '../utils/db.js';
 import { ConflictError, DatabaseError, NotFoundError } from '../utils/errors.js';
+import { log } from '../utils/logger.js';
 
 /**
  * Repository for managing disciplines
@@ -43,8 +44,10 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
     const disciplineTypeRepo = new DisciplineTypeRepository();
 
     const { documents: disciplines } = await this.findAll({ limit: 100 });
+    log(`[DisciplineRepository] Found ${disciplines.length} disciplines`);
 
     const result: DisciplineDTO[] = [];
+    log(`[DisciplineRepository] Starting to process ${disciplines.length} disciplines`);
 
     for (const discipline of disciplines) {
       const { documents: types } = await disciplineTypeRepo.findByDisciplineId(discipline.$id);
@@ -65,6 +68,7 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
       });
     }
 
+    log(`[DisciplineRepository] Successfully processed ${result.length} disciplines with types`);
     return result;
   }
 
