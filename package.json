@@ -1,0 +1,31 @@
+{
+  "name": "ims_trojan_horse_backend",
+  "version": "1.0.0",
+  "description": "IoT Alarm Flow Management Backend for TESCO",
+  "main": "dist/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node --esm src/index.ts",
+    "start": "node dist/index.js",
+    "setup-db": "ts-node --esm scripts/setup-database.ts",
+    "seed": "ts-node --esm scripts/seed-data.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "node-appwrite": "^21.0.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
