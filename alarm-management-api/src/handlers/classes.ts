@@ -6,8 +6,8 @@
 import { z } from 'zod';
 import type { FunctionContext, RouteParams } from '../types.js';
 import { sendSuccess, handleError, getRequestData, parseBody } from '../utils/response.js';
-import { ClassRepository, FieldRepository } from '../../../../lib/repositories/class.repository.js';
-import { ValidationError } from '../../../../lib/utils/errors.js';
+import { ClassRepository, FieldRepository } from '@lib/repositories/class.repository.js';
+import { ValidationError } from '@lib/utils/errors.js';
 
 // Request schemas
 const GetClassesRequestSchema = z.object({

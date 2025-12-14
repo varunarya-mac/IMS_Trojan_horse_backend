@@ -17,13 +17,12 @@
     "baseUrl": ".",
     "paths": {
       "@lib/*": ["./lib/*"],
-      "@functions/*": ["./functions/*"]
+      "@api/*": ["./alarm-management-api/*"]
     }
   },
   "include": [
     "lib/**/*",
-    "functions/**/*",
-    "scripts/**/*"
+    "alarm-management-api/**/*"
   ],
   "exclude": [
     "node_modules",

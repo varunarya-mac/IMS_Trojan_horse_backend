@@ -7,10 +7,10 @@ import { z } from 'zod';
 import type { FunctionContext, RouteParams } from '../types.js';
 import { getUserContext } from '../types.js';
 import { sendSuccess, handleError, parseBody } from '../utils/response.js';
-import { AlarmFlowRepository } from '../../../../lib/repositories/alarm-flow.repository.js';
-import { VersioningService } from '../../../../lib/services/versioning.service.js';
-import { AuditService } from '../../../../lib/services/audit.service.js';
-import { ValidationError, NotFoundError } from '../../../../lib/utils/errors.js';
+import { AlarmFlowRepository } from '@lib/repositories/alarm-flow.repository.js';
+import { VersioningService } from '@lib/services/versioning.service.js';
+import { AuditService } from '@lib/services/audit.service.js';
+import { ValidationError, NotFoundError } from '@lib/utils/errors.js';
 
 // Request schemas
 const RollbackRequestSchema = z.object({

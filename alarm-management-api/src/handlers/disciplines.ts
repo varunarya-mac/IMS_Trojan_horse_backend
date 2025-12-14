@@ -5,7 +5,7 @@
 
 import type { FunctionContext, RouteParams } from '../types.js';
 import { sendSuccess, handleError } from '../utils/response.js';
-import { DisciplineRepository } from '../../../../lib/repositories/discipline.repository.js';
+import { DisciplineRepository } from '@lib/repositories/discipline.repository.js';
 
 /**
  * GET /disciplines

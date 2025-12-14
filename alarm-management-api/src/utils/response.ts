@@ -3,7 +3,7 @@
  */
 
 import type { FunctionContext, ApiResponse } from '../types.js';
-import { ApiError } from '../../../../lib/utils/errors.js';
+import { ApiError } from '@lib/utils/errors.js';
 
 /**
  * Send a successful JSON response

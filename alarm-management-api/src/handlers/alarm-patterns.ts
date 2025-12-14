@@ -7,14 +7,14 @@ import { z } from 'zod';
 import type { FunctionContext, RouteParams } from '../types.js';
 import { getUserContext } from '../types.js';
 import { sendSuccess, handleError, getRequestData, parseBody } from '../utils/response.js';
-import { AlarmFlowRepository } from '../../../../lib/repositories/alarm-flow.repository.js';
-import { VersioningService } from '../../../../lib/services/versioning.service.js';
-import { ValidationError, NotFoundError } from '../../../../lib/utils/errors.js';
+import { AlarmFlowRepository } from '@lib/repositories/alarm-flow.repository.js';
+import { VersioningService } from '@lib/services/versioning.service.js';
+import { ValidationError, NotFoundError } from '@lib/utils/errors.js';
 import {
   CreateAlarmPatternSchema,
   UpdateAlarmPatternSchema,
   ProgramModuleSchema,
-} from '../../../../lib/utils/validation.js';
+} from '@lib/utils/validation.js';
 
 // Request schemas for this handler
 const GetAlarmFlowsRequestSchema = z.object({

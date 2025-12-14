@@ -6,8 +6,8 @@
 import { z } from 'zod';
 import type { FunctionContext, RouteParams } from '../types.js';
 import { sendSuccess, handleError, parseBody } from '../utils/response.js';
-import { ImportService } from '../../../../lib/services/import.service.js';
-import { ValidationError } from '../../../../lib/utils/errors.js';
+import { ImportService } from '@lib/services/import.service.js';
+import { ValidationError } from '@lib/utils/errors.js';
 
 // Request schema for import
 const ImportRequestSchema = z.object({
