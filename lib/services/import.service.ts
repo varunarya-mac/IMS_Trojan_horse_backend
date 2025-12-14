@@ -9,7 +9,7 @@ import { AlarmFlowRepository } from '../repositories/alarm-flow.repository.js';
 import { ClassRepository, FieldRepository } from '../repositories/class.repository.js';
 import type { ImportSummaryDTO, ImportErrorDetail } from '../types/dtos.js';
 import { stringifyProgramModules } from '../types/program-modules.js';
-import { ImportError as ImportErrorClass, ConflictError } from '../utils/errors.js';
+import { ImportError as ImportErrorClass, ConflictError, DatabaseError } from '../utils/errors.js';
 
 /**
  * Import result tracking
@@ -53,8 +53,12 @@ export class ImportService {
    * Import a single JSON configuration
    */
   async importConfig(jsonContent: string, overwriteExisting: boolean = false): Promise<ImportSummaryDTO> {
-    const parsed = parseConfigJson(jsonContent);
-    return this.importParsedConfig(parsed, overwriteExisting);
+    try {
+      const parsed = parseConfigJson(jsonContent);
+      return await this.importParsedConfig(parsed, overwriteExisting);
+    } catch (error) {
+      throw new DatabaseError('Failed to import configuration', { error });
+    }
   }
 
   /**
@@ -64,9 +68,13 @@ export class ImportService {
     jsonContents: string[],
     overwriteExisting: boolean = false
   ): Promise<ImportSummaryDTO> {
-    const configs = jsonContents.map(content => parseConfigJson(content));
-    const merged = mergeConfigs(...configs);
-    return this.importParsedConfig(merged, overwriteExisting);
+    try {
+      const configs = jsonContents.map(content => parseConfigJson(content));
+      const merged = mergeConfigs(...configs);
+      return await this.importParsedConfig(merged, overwriteExisting);
+    } catch (error) {
+      throw new DatabaseError('Failed to import multiple configurations', { error });
+    }
   }
 
   /**
@@ -76,36 +84,40 @@ export class ImportService {
     parsed: ParsedConfig,
     overwriteExisting: boolean
   ): Promise<ImportSummaryDTO> {
-    const result: ImportResult = {
-      disciplinesCreated: 0,
-      disciplineTypesCreated: 0,
-      alarmPatternsCreated: 0,
-      classesCreated: 0,
-      fieldsCreated: 0,
-      errors: [],
-    };
+    try {
+      const result: ImportResult = {
+        disciplinesCreated: 0,
+        disciplineTypesCreated: 0,
+        alarmPatternsCreated: 0,
+        classesCreated: 0,
+        fieldsCreated: 0,
+        errors: [],
+      };
 
-    const idMapping: IdMapping = {
-      disciplines: new Map(),
-      disciplineTypes: new Map(),
-    };
+      const idMapping: IdMapping = {
+        disciplines: new Map(),
+        disciplineTypes: new Map(),
+      };
 
-    // Phase 1: Import disciplines
-    await this.importDisciplines(parsed, result, idMapping, overwriteExisting);
+      // Phase 1: Import disciplines
+      await this.importDisciplines(parsed, result, idMapping, overwriteExisting);
 
-    // Phase 2: Import discipline types
-    await this.importDisciplineTypes(parsed, result, idMapping, overwriteExisting);
+      // Phase 2: Import discipline types
+      await this.importDisciplineTypes(parsed, result, idMapping, overwriteExisting);
 
-    // Phase 3: Import alarm patterns
-    await this.importAlarmPatterns(parsed, result, idMapping, overwriteExisting);
+      // Phase 3: Import alarm patterns
+      await this.importAlarmPatterns(parsed, result, idMapping, overwriteExisting);
 
-    // Phase 4: Import classes
-    await this.importClasses(parsed, result, idMapping, overwriteExisting);
+      // Phase 4: Import classes
+      await this.importClasses(parsed, result, idMapping, overwriteExisting);
 
-    // Phase 5: Import fields
-    await this.importFields(parsed, result, idMapping, overwriteExisting);
+      // Phase 5: Import fields
+      await this.importFields(parsed, result, idMapping, overwriteExisting);
 
-    return result;
+      return result;
+    } catch (error) {
+      throw new DatabaseError('Failed to import parsed configuration', { error });
+    }
   }
 
   /**

@@ -6,6 +6,7 @@
 import { AlarmFlowRepository } from '../repositories/alarm-flow.repository.js';
 import type { AlarmPatternDTO } from '../types/dtos.js';
 import type { ProgramModule } from '../types/program-modules.js';
+import { DatabaseError } from '../utils/errors.js';
 
 /**
  * Audit action types
@@ -66,45 +67,49 @@ export class AuditService {
    * Uses version history as the audit log
    */
   async getAuditTrail(alarmPatternKey: string): Promise<AuditTrail> {
-    const versions = await this.alarmFlowRepo.getVersionHistoryDTO(alarmPatternKey);
+    try {
+      const versions = await this.alarmFlowRepo.getVersionHistoryDTO(alarmPatternKey);
 
-    if (versions.length === 0) {
+      if (versions.length === 0) {
+        return {
+          alarmPatternKey,
+          totalVersions: 0,
+          entries: [],
+        };
+      }
+
+      // Convert versions to audit entries
+      const entries: AuditLogEntry[] = [];
+
+      for (let i = 0; i < versions.length; i++) {
+        const version = versions[i];
+        const previousVersion = versions[i + 1]; // versions are sorted desc
+
+        const action = this.determineAction(version.changeDescription);
+        const changes = previousVersion
+          ? this.computeChanges(previousVersion.alarm, version.alarm)
+          : [];
+
+        entries.push({
+          id: version.alarm.id,
+          alarmPatternKey,
+          version: version.version,
+          action,
+          userId: version.createdBy,
+          description: version.changeDescription || 'No description',
+          changes,
+          timestamp: version.createdAt,
+        });
+      }
+
       return {
         alarmPatternKey,
-        totalVersions: 0,
-        entries: [],
+        totalVersions: versions.length,
+        entries,
       };
+    } catch (error) {
+      throw new DatabaseError(`Failed to get audit trail for alarm pattern: ${alarmPatternKey}`, { error });
     }
-
-    // Convert versions to audit entries
-    const entries: AuditLogEntry[] = [];
-
-    for (let i = 0; i < versions.length; i++) {
-      const version = versions[i];
-      const previousVersion = versions[i + 1]; // versions are sorted desc
-
-      const action = this.determineAction(version.changeDescription);
-      const changes = previousVersion
-        ? this.computeChanges(previousVersion.alarm, version.alarm)
-        : [];
-
-      entries.push({
-        id: version.alarm.id,
-        alarmPatternKey,
-        version: version.version,
-        action,
-        userId: version.createdBy,
-        description: version.changeDescription || 'No description',
-        changes,
-        timestamp: version.createdAt,
-      });
-    }
-
-    return {
-      alarmPatternKey,
-      totalVersions: versions.length,
-      entries,
-    };
   }
 
   /**
@@ -126,15 +131,19 @@ export class AuditService {
       programModules: ProgramModule[];
     }>
   ): Promise<AlarmPatternDTO> {
-    const fullDescription = `[${action}] ${description}`;
+    try {
+      const fullDescription = `[${action}] ${description}`;
 
-    const newVersion = await this.alarmFlowRepo.createNewVersion(alarmPatternKey, {
-      ...updates,
-      changeDescription: fullDescription,
-      updatedBy: userId,
-    });
+      const newVersion = await this.alarmFlowRepo.createNewVersion(alarmPatternKey, {
+        ...updates,
+        changeDescription: fullDescription,
+        updatedBy: userId,
+      });
 
-    return this.alarmFlowRepo.toDTO(newVersion);
+      return this.alarmFlowRepo.toDTO(newVersion);
+    } catch (error) {
+      throw new DatabaseError(`Failed to log change for alarm pattern: ${alarmPatternKey}`, { error });
+    }
   }
 
   /**
@@ -192,19 +201,23 @@ export class AuditService {
     fromVersion: number,
     toVersion: number
   ): Promise<FieldChange[]> {
-    const [from, to] = await Promise.all([
-      this.alarmFlowRepo.findSpecificVersion(alarmPatternKey, fromVersion),
-      this.alarmFlowRepo.findSpecificVersion(alarmPatternKey, toVersion),
-    ]);
+    try {
+      const [from, to] = await Promise.all([
+        this.alarmFlowRepo.findSpecificVersion(alarmPatternKey, fromVersion),
+        this.alarmFlowRepo.findSpecificVersion(alarmPatternKey, toVersion),
+      ]);
 
-    if (!from || !to) {
-      return [];
+      if (!from || !to) {
+        return [];
+      }
+
+      return this.computeChanges(
+        this.alarmFlowRepo.toDTO(from),
+        this.alarmFlowRepo.toDTO(to)
+      );
+    } catch (error) {
+      throw new DatabaseError(`Failed to get changes between versions ${fromVersion} and ${toVersion} for alarm pattern: ${alarmPatternKey}`, { error });
     }
-
-    return this.computeChanges(
-      this.alarmFlowRepo.toDTO(from),
-      this.alarmFlowRepo.toDTO(to)
-    );
   }
 
   /**
@@ -217,44 +230,52 @@ export class AuditService {
     firstChange: string;
     lastChange: string;
   }> {
-    const trail = await this.getAuditTrail(alarmPatternKey);
+    try {
+      const trail = await this.getAuditTrail(alarmPatternKey);
 
-    const changesByUser: Record<string, number> = {};
-    const changesByAction: Record<AuditAction, number> = {
-      CREATE: 0,
-      UPDATE: 0,
-      DELETE: 0,
-      ROLLBACK: 0,
-      IMPORT: 0,
-      EXPORT: 0,
-      VIEW: 0,
-    };
+      const changesByUser: Record<string, number> = {};
+      const changesByAction: Record<AuditAction, number> = {
+        CREATE: 0,
+        UPDATE: 0,
+        DELETE: 0,
+        ROLLBACK: 0,
+        IMPORT: 0,
+        EXPORT: 0,
+        VIEW: 0,
+      };
 
-    for (const entry of trail.entries) {
-      const user = entry.userId || 'system';
-      changesByUser[user] = (changesByUser[user] || 0) + 1;
-      changesByAction[entry.action]++;
+      for (const entry of trail.entries) {
+        const user = entry.userId || 'system';
+        changesByUser[user] = (changesByUser[user] || 0) + 1;
+        changesByAction[entry.action]++;
+      }
+
+      const timestamps = trail.entries.map(e => e.timestamp).sort();
+
+      return {
+        totalChanges: trail.totalVersions,
+        changesByUser,
+        changesByAction,
+        firstChange: timestamps[0] || '',
+        lastChange: timestamps[timestamps.length - 1] || '',
+      };
+    } catch (error) {
+      throw new DatabaseError(`Failed to get change summary for alarm pattern: ${alarmPatternKey}`, { error });
     }
-
-    const timestamps = trail.entries.map(e => e.timestamp).sort();
-
-    return {
-      totalChanges: trail.totalVersions,
-      changesByUser,
-      changesByAction,
-      firstChange: timestamps[0] || '',
-      lastChange: timestamps[timestamps.length - 1] || '',
-    };
   }
 
   /**
    * Search audit entries by user
    */
   async getAuditsByUser(userId: string, limit: number = 100): Promise<AuditLogEntry[]> {
-    // This would require a different query approach
-    // For now, we return an empty array as this needs additional indexing
-    // In production, you'd want a dedicated audit_logs collection
-    return [];
+    try {
+      // This would require a different query approach
+      // For now, we return an empty array as this needs additional indexing
+      // In production, you'd want a dedicated audit_logs collection
+      return [];
+    } catch (error) {
+      throw new DatabaseError(`Failed to get audits by user: ${userId}`, { error });
+    }
   }
 
   /**
@@ -265,15 +286,19 @@ export class AuditService {
     startDate: string,
     endDate: string
   ): Promise<AuditLogEntry[]> {
-    const trail = await this.getAuditTrail(alarmPatternKey);
+    try {
+      const trail = await this.getAuditTrail(alarmPatternKey);
 
-    const start = new Date(startDate).getTime();
-    const end = new Date(endDate).getTime();
+      const start = new Date(startDate).getTime();
+      const end = new Date(endDate).getTime();
 
-    return trail.entries.filter(entry => {
-      const entryTime = new Date(entry.timestamp).getTime();
-      return entryTime >= start && entryTime <= end;
-    });
+      return trail.entries.filter(entry => {
+        const entryTime = new Date(entry.timestamp).getTime();
+        return entryTime >= start && entryTime <= end;
+      });
+    } catch (error) {
+      throw new DatabaseError(`Failed to get audits by date range for alarm pattern: ${alarmPatternKey}`, { error });
+    }
   }
 
   /**
