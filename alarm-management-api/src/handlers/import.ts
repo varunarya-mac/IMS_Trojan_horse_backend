@@ -54,8 +54,8 @@ export async function importConfig(
 
     log(`Import completed: ${JSON.stringify(result)}`);
 
-    sendSuccess(res, result);
+    return sendSuccess(res, result);
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }

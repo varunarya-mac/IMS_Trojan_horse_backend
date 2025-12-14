@@ -27,8 +27,8 @@ export async function getDisciplines(
 
     log(`Found ${disciplines.length} disciplines`);
 
-    sendSuccess(res, { disciplines });
+    return sendSuccess(res, { disciplines });
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }

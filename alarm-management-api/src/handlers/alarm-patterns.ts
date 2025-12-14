@@ -53,9 +53,9 @@ export async function getAlarmFlows(
 
     log(`Found ${result.alarms.length} alarms and ${result.classes.length} classes`);
 
-    sendSuccess(res, result);
+    return sendSuccess(res, result);
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }
 
@@ -86,9 +86,9 @@ export async function getAlarmPattern(
     }
 
     // pattern is already a DTO from the versioning service
-    sendSuccess(res, { alarmPattern: pattern });
+    return sendSuccess(res, { alarmPattern: pattern });
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }
 
@@ -133,9 +133,9 @@ export async function createAlarmPattern(
 
     log(`Created alarm pattern with key: ${pattern.alarmPatternKey}`);
 
-    sendSuccess(res, { alarmPattern: alarmFlowRepo.toDTO(pattern) }, 201);
+    return sendSuccess(res, { alarmPattern: alarmFlowRepo.toDTO(pattern) }, 201);
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }
 
@@ -203,12 +203,12 @@ export async function updateAlarmPattern(
 
     log(`Updated alarm pattern to version ${newPattern.version}`);
 
-    sendSuccess(res, {
+    return sendSuccess(res, {
       alarmPattern: newPattern,
       previousVersion: currentVersion,
     });
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }
 
@@ -234,11 +234,11 @@ export async function deleteAlarmPattern(
 
     log(`Soft deleted alarm pattern: ${alarmPatternKey}`);
 
-    sendSuccess(res, {
+    return sendSuccess(res, {
       message: 'Alarm pattern deleted successfully',
       alarmPatternKey,
     });
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }

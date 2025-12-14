@@ -17,7 +17,7 @@ export function sendSuccess<T>(
     success: true,
     data,
   };
-  res.json(response, statusCode);
+  return res.json(response, statusCode);
 }
 
 /**
@@ -38,7 +38,7 @@ export function sendError(
       ...(details !== undefined ? { details } : {}),
     },
   };
-  res.json(response, statusCode);
+  return res.json(response, statusCode);
 }
 
 /**
@@ -51,18 +51,16 @@ export function handleError(
 ): void {
   if (error instanceof ApiError) {
     logError(`${error.code}: ${error.message}`);
-    sendError(res, error.code, error.message, error.statusCode, error.details);
-    return;
+     return sendError(res, error.code, error.message, error.statusCode, error.details);
   }
 
   if (error instanceof Error) {
     logError(`Unexpected error: ${error.message}`);
-    sendError(res, 'INTERNAL_ERROR', 'Internal server error', 500);
-    return;
+    return sendError(res, 'INTERNAL_ERROR', 'Internal server error', 500);
   }
 
   logError(`Unknown error: ${String(error)}`);
-  sendError(res, 'INTERNAL_ERROR', 'Internal server error', 500);
+  return sendError(res, 'INTERNAL_ERROR', 'Internal server error', 500);
 }
 
 /**

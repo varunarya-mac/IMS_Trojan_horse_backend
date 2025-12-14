@@ -53,9 +53,9 @@ export async function getAlarmVersions(
       response.audit = audit;
     }
 
-    sendSuccess(res, response);
+    return sendSuccess(res, response);
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }
 
@@ -105,12 +105,12 @@ export async function rollbackAlarm(
 
     log(`Rolled back from version ${currentVersion} to ${targetVersion}, created version ${newPattern.version}`);
 
-    sendSuccess(res, {
+    return sendSuccess(res, {
       alarmPattern: newPattern,
       rolledBackFrom: currentVersion,
       rolledBackTo: targetVersion,
     });
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }

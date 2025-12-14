@@ -70,9 +70,9 @@ export async function getClasses(
       log(`Found ${fields.length} fields`);
     }
 
-    sendSuccess(res, response);
+    return sendSuccess(res, response);
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }
 
@@ -108,8 +108,8 @@ export async function updateClass(
 
     log(`Updated class: ${classId}`);
 
-    sendSuccess(res, { class: classRepo.toDTO(updatedClass) });
+    return sendSuccess(res, { class: classRepo.toDTO(updatedClass) });
   } catch (error) {
-    handleError(res, error, logError);
+    return handleError(res, error, logError);
   }
 }

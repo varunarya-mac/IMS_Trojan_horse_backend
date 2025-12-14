@@ -60,6 +60,6 @@ export default async function (context: FunctionContext): Promise<void> {
   } catch (error) {
     // Catch any unhandled errors
     logError(`Unhandled error: ${error instanceof Error ? error.message : String(error)}`);
-    sendError(res, 'INTERNAL_ERROR', 'An unexpected error occurred', 500);
+    return sendError(res, 'INTERNAL_ERROR', 'An unexpected error occurred', 500);
   }
 }
