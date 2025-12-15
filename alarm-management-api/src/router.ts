@@ -160,7 +160,7 @@ export async function routeRequest(context: FunctionContext): Promise<void> {
   const match = findRoute(req.path, req.method);
 
   if (!match) {
-   return res.json(
+    res.json(
       {
         success: false,
         error: {
@@ -170,6 +170,7 @@ export async function routeRequest(context: FunctionContext): Promise<void> {
       },
       404
     );
+    return;
   }
 
   const { route, params } = match;
@@ -179,7 +180,7 @@ export async function routeRequest(context: FunctionContext): Promise<void> {
   const handler = getHandler(route.handler);
   if (!handler) {
     logError(`Handler not found: ${route.handler}`);
-   return res.json(
+    res.json(
       {
         success: false,
         error: {
@@ -189,13 +190,11 @@ export async function routeRequest(context: FunctionContext): Promise<void> {
       },
       500
     );
+    return;
   }
 
-  // Execute handler
-  const result = await handler(context, params, req.query || {});
-
-  // Handler should have already sent response
-  // This return value is for any additional processing if needed
+  // Execute handler - response is sent via res.json/send/empty
+  await handler(context, params, req.query || {});
   return;
 }
 
