@@ -56,7 +56,7 @@ export default async function (context: FunctionContext): Promise<void> {
 
   try {
     // Route the request to appropriate handler
-    await routeRequest(context);
+   return await routeRequest(context);
   } catch (error) {
     // Catch any unhandled errors
     logError(`Unhandled error: ${error instanceof Error ? error.message : String(error)}`);
