@@ -179,7 +179,7 @@ export interface DisciplinesListDTO {
 }
 
 /**
- * Alarm flows list response
+ * Alarm flows list response (single discipline type)
  */
 export interface AlarmFlowsListDTO {
   discipline: {
@@ -192,6 +192,24 @@ export interface AlarmFlowsListDTO {
   };
   alarms: AlarmPatternDTO[];
   classes: ClassDTO[];
+}
+
+/**
+ * Alarm flows grouped by discipline response
+ */
+export interface AlarmFlowsByDisciplineDTO {
+  discipline: {
+    id: string;
+    name: string;
+  };
+  disciplineTypes: Array<{
+    disciplineType: {
+      id: string;
+      name: string;
+    };
+    alarms: AlarmPatternDTO[];
+    classes: ClassDTO[];
+  }>;
 }
 
 /**

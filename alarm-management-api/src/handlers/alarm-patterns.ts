@@ -18,7 +18,7 @@ import {
 
 // Request schemas for this handler
 const GetAlarmFlowsRequestSchema = z.object({
-  disciplineTypeId: z.string().min(1),
+  disciplineId: z.string().min(1).optional(),
 });
 
 const GetAlarmPatternRequestSchema = z.object({
@@ -27,31 +27,39 @@ const GetAlarmPatternRequestSchema = z.object({
 
 /**
  * GET /alarm-flows
- * Get alarm flows for a discipline type with full context
+ * Get alarm flows by discipline (optional filter)
+ * - If disciplineId provided: returns alarm flows for that discipline
+ * - If no disciplineId: returns all alarm flows grouped by discipline
  */
 export async function getAlarmFlows(
   context: FunctionContext,
   _params: RouteParams,
   query: Record<string, string>
-): Promise<void> {
+): Promise<unknown> {
   const { req, res, log, error: logError } = context;
 
   try {
-    const data = getRequestData<{ disciplineTypeId?: string }>(req.body, query);
+    const data = getRequestData<{ disciplineId?: string }>(req.body, query);
 
-    // Validate request
+    // Validate request (disciplineId is optional)
     const validation = GetAlarmFlowsRequestSchema.safeParse(data);
     if (!validation.success) {
       throw new ValidationError('Invalid request', { errors: validation.error.format() });
     }
 
-    const { disciplineTypeId } = validation.data;
-    log(`Fetching alarm flows for discipline type: ${disciplineTypeId}`);
-
+    const { disciplineId } = validation.data;
     const alarmFlowRepo = new AlarmFlowRepository();
-    const result = await alarmFlowRepo.getAlarmFlowsWithContext(disciplineTypeId);
 
-    log(`Found ${result.alarms.length} alarms and ${result.classes.length} classes`);
+    let result;
+    if (disciplineId) {
+      log(`Fetching alarm flows for discipline: ${disciplineId}`);
+      result = [await alarmFlowRepo.getAlarmFlowsByDiscipline(disciplineId)];
+    } else {
+      log('Fetching all alarm flows');
+      result = await alarmFlowRepo.getAllAlarmFlows();
+    }
+
+    log(`Found ${result.length} discipline(s) with alarm flows`);
 
     return sendSuccess(res, result);
   } catch (error) {

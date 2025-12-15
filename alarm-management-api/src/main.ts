@@ -6,7 +6,7 @@
  *
  * Routes:
  *   GET    /disciplines                     - List all disciplines with types
- *   GET    /alarm-flows                     - Get alarm flows by discipline type
+ *   GET    /alarm-flows                     - Get alarm flows by discipline name ID
  *   GET    /alarm-patterns/:key             - Get single alarm pattern
  *   POST   /alarm-patterns                  - Create new alarm pattern
  *   PUT    /alarm-patterns/:key             - Update alarm pattern

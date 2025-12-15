@@ -6,7 +6,7 @@
 import { Query } from 'node-appwrite';
 import { BaseRepository, type QueryOptions, type PaginatedResult } from './base.repository.js';
 import { COLLECTION_IDS, type AlarmPatternEntity } from '../types/entities.js';
-import type { AlarmPatternDTO, AlarmFlowDTO, AlarmVersionDTO, AlarmFlowsListDTO } from '../types/dtos.js';
+import type { AlarmPatternDTO, AlarmFlowDTO, AlarmVersionDTO, AlarmFlowsListDTO, AlarmFlowsByDisciplineDTO } from '../types/dtos.js';
 import type { ProgramModule } from '../types/program-modules.js';
 import { parseProgramModules, stringifyProgramModules } from '../types/program-modules.js';
 import { DisciplineRepository, DisciplineTypeRepository } from './discipline.repository.js';
@@ -351,6 +351,75 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
       this.logger.error(`[AlarmFlowRepository] Error getting alarm flows with context: ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof NotFoundError) throw error;
       throw new DatabaseError(`Failed to get alarm flows with context for discipline type: ${disciplineTypeId}`, { error });
+    }
+  }
+
+  /**
+   * Get alarm flows grouped by discipline
+   */
+  async getAlarmFlowsByDiscipline(disciplineId: string): Promise<AlarmFlowsByDisciplineDTO> {
+    try {
+      this.logger.log(`[AlarmFlowRepository] Getting alarm flows for discipline: ${disciplineId}`);
+
+      const disciplineRepo = new DisciplineRepository(this.logger);
+      const disciplineTypeRepo = new DisciplineTypeRepository(this.logger);
+      const classRepo = new ClassRepository(this.logger);
+
+      // Get discipline
+      const discipline = await disciplineRepo.findByIdOrFail(disciplineId, 'Discipline');
+
+      // Get all discipline types for this discipline
+      const { documents: disciplineTypes } = await disciplineTypeRepo.findByDisciplineId(disciplineId);
+
+      // For each discipline type, get alarms and classes
+      const disciplineTypesData = await Promise.all(
+        disciplineTypes.map(async (dt) => {
+          const [alarms, classResult] = await Promise.all([
+            this.findLatestByDisciplineType(dt.$id),
+            classRepo.findByDisciplineType(dt.$id),
+          ]);
+
+          return {
+            disciplineType: { id: dt.$id, name: dt.name },
+            alarms: alarms.map(a => this.toDTO(a)),
+            classes: classResult.documents.map(c => classRepo.toDTO(c)),
+          };
+        })
+      );
+
+      this.logger.log(`[AlarmFlowRepository] Found ${disciplineTypesData.length} discipline types for discipline: ${disciplineId}`);
+
+      return {
+        discipline: { id: discipline.$id, name: discipline.name },
+        disciplineTypes: disciplineTypesData,
+      };
+    } catch (error) {
+      this.logger.error(`[AlarmFlowRepository] Error getting alarm flows for discipline: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      if (error instanceof NotFoundError) throw error;
+      throw new DatabaseError(`Failed to get alarm flows for discipline: ${disciplineId}`, { error });
+    }
+  }
+
+  /**
+   * Get all alarm flows grouped by discipline
+   */
+  async getAllAlarmFlows(): Promise<AlarmFlowsByDisciplineDTO[]> {
+    try {
+      this.logger.log('[AlarmFlowRepository] Getting all alarm flows');
+
+      const disciplineRepo = new DisciplineRepository(this.logger);
+      const { documents: disciplines } = await disciplineRepo.findAll({ limit: 100 });
+
+      const result = await Promise.all(
+        disciplines.map(d => this.getAlarmFlowsByDiscipline(d.$id))
+      );
+
+      this.logger.log(`[AlarmFlowRepository] Retrieved alarm flows for ${result.length} disciplines`);
+
+      return result;
+    } catch (error) {
+      this.logger.error(`[AlarmFlowRepository] Error getting all alarm flows: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new DatabaseError('Failed to get all alarm flows', { error });
     }
   }
 
