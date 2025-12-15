@@ -13,6 +13,8 @@ import { DisciplineRepository, DisciplineTypeRepository } from './discipline.rep
 import { ClassRepository } from './class.repository.js';
 import { NotFoundError, ConflictError, DatabaseError } from '../utils/errors.js';
 import { generateId } from '../utils/db.js';
+import type { Logger } from '../types/logger.js';
+import { createNoOpLogger } from '../types/logger.js';
 
 /**
  * Input data for creating a new alarm pattern
@@ -50,8 +52,11 @@ export interface UpdateAlarmPatternInput {
  * Repository for managing alarm patterns with versioning
  */
 export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
-  constructor() {
+  private logger: Logger;
+
+  constructor(logger?: Logger) {
     super(COLLECTION_IDS.ALARM_PATTERNS);
+    this.logger = logger || createNoOpLogger();
   }
 
   /**
@@ -81,11 +86,13 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
    */
   async findLatestByKey(alarmPatternKey: string): Promise<AlarmPatternEntity | null> {
     try {
+      this.logger.log(`[AlarmFlowRepository] Finding latest alarm pattern: ${alarmPatternKey}`);
       return await this.findOneWhere([
         Query.equal('alarmPatternKey', alarmPatternKey),
         Query.equal('isLatest', true),
       ]);
     } catch (error) {
+      this.logger.error(`[AlarmFlowRepository] Error finding alarm pattern '${alarmPatternKey}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw new DatabaseError(`Failed to find latest alarm pattern by key: ${alarmPatternKey}`, { error });
     }
   }
@@ -153,6 +160,7 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
   async createAlarmPattern(input: CreateAlarmPatternInput): Promise<AlarmPatternEntity> {
     try {
       const alarmPatternKey = this.generateAlarmPatternKey(input.disciplineTypeId, input.alarmId);
+      this.logger.log(`[AlarmFlowRepository] Creating alarm pattern: ${input.alarmId} (key: ${alarmPatternKey})`);
 
       // Check if alarm pattern already exists
       const existing = await this.findLatestByKey(alarmPatternKey);
@@ -162,7 +170,7 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
 
       const now = new Date().toISOString();
 
-      return await this.create({
+      const result = await this.create({
         disciplineTypeId: input.disciplineTypeId,
         alarmPatternKey,
         version: 1,
@@ -180,7 +188,11 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
         createdBy: input.createdBy || null,
         changeDescription: 'Initial version',
       });
+
+      this.logger.log(`[AlarmFlowRepository] Created alarm pattern: ${input.alarmId} (ID: ${result.$id}, version: 1)`);
+      return result;
     } catch (error) {
+      this.logger.error(`[AlarmFlowRepository] Error creating alarm pattern '${input.alarmId}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof ConflictError) throw error;
       throw new DatabaseError(`Failed to create alarm pattern: ${input.alarmId}`, { error });
     }
@@ -194,17 +206,19 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
     updates: UpdateAlarmPatternInput
   ): Promise<AlarmPatternEntity> {
     try {
+      this.logger.log(`[AlarmFlowRepository] Creating new version for alarm pattern: ${alarmPatternKey}`);
+
       // Get current latest version
       const current = await this.findLatestByKeyOrFail(alarmPatternKey);
+      const newVersion = current.version + 1;
 
       // Mark current as not latest
       await this.update(current.$id, { isLatest: false });
 
       const now = new Date().toISOString();
-      const newVersion = current.version + 1;
 
       // Create new version with merged data
-      return await this.create({
+      const result = await this.create({
         disciplineTypeId: current.disciplineTypeId,
         alarmPatternKey,
         version: newVersion,
@@ -224,7 +238,11 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
         createdBy: updates.updatedBy,
         changeDescription: updates.changeDescription,
       });
+
+      this.logger.log(`[AlarmFlowRepository] Created new version ${newVersion} for alarm pattern: ${alarmPatternKey} (ID: ${result.$id})`);
+      return result;
     } catch (error) {
+      this.logger.error(`[AlarmFlowRepository] Error creating new version for '${alarmPatternKey}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof NotFoundError) throw error;
       throw new DatabaseError(`Failed to create new version for alarm pattern: ${alarmPatternKey}`, { error });
     }
@@ -302,9 +320,12 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
    */
   async getAlarmFlowsWithContext(disciplineTypeId: string): Promise<AlarmFlowsListDTO> {
     try {
-      const disciplineTypeRepo = new DisciplineTypeRepository();
-      const disciplineRepo = new DisciplineRepository();
-      const classRepo = new ClassRepository();
+      this.logger.log(`[AlarmFlowRepository] Getting alarm flows with context for discipline type: ${disciplineTypeId}`);
+
+      // Pass logger to child repositories
+      const disciplineTypeRepo = new DisciplineTypeRepository(this.logger);
+      const disciplineRepo = new DisciplineRepository(this.logger);
+      const classRepo = new ClassRepository(this.logger);
 
       // Get discipline type and parent discipline
       const disciplineType = await disciplineTypeRepo.findByIdOrFail(disciplineTypeId, 'Discipline Type');
@@ -315,6 +336,8 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
         this.findLatestByDisciplineType(disciplineTypeId),
         classRepo.findByDisciplineType(disciplineTypeId),
       ]);
+
+      this.logger.log(`[AlarmFlowRepository] Retrieved ${alarms.length} alarms and ${classResult.documents.length} classes`);
 
       return {
         discipline: {
@@ -329,6 +352,7 @@ export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
         classes: classResult.documents.map(cls => classRepo.toDTO(cls)),
       };
     } catch (error) {
+      this.logger.error(`[AlarmFlowRepository] Error getting alarm flows with context: ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof NotFoundError) throw error;
       throw new DatabaseError(`Failed to get alarm flows with context for discipline type: ${disciplineTypeId}`, { error });
     }

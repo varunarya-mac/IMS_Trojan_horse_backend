@@ -10,6 +10,8 @@ import { ClassRepository, FieldRepository } from '../repositories/class.reposito
 import type { ImportSummaryDTO, ImportErrorDetail } from '../types/dtos.js';
 import { stringifyProgramModules } from '../types/program-modules.js';
 import { ImportError as ImportErrorClass, ConflictError, DatabaseError } from '../utils/errors.js';
+import type { Logger } from '../types/logger.js';
+import { createNoOpLogger } from '../types/logger.js';
 
 /**
  * Import result tracking
@@ -35,18 +37,22 @@ interface IdMapping {
  * Import Service Class
  */
 export class ImportService {
+  private logger: Logger;
   private disciplineRepo: DisciplineRepository;
   private disciplineTypeRepo: DisciplineTypeRepository;
   private alarmFlowRepo: AlarmFlowRepository;
   private classRepo: ClassRepository;
   private fieldRepo: FieldRepository;
 
-  constructor() {
-    this.disciplineRepo = new DisciplineRepository();
-    this.disciplineTypeRepo = new DisciplineTypeRepository();
-    this.alarmFlowRepo = new AlarmFlowRepository();
-    this.classRepo = new ClassRepository();
-    this.fieldRepo = new FieldRepository();
+  constructor(logger?: Logger) {
+    this.logger = logger || createNoOpLogger();
+
+    // Pass logger to all repositories
+    this.disciplineRepo = new DisciplineRepository(this.logger);
+    this.disciplineTypeRepo = new DisciplineTypeRepository(this.logger);
+    this.alarmFlowRepo = new AlarmFlowRepository(this.logger);
+    this.classRepo = new ClassRepository(this.logger);
+    this.fieldRepo = new FieldRepository(this.logger);
   }
 
   /**
@@ -85,6 +91,8 @@ export class ImportService {
     overwriteExisting: boolean
   ): Promise<ImportSummaryDTO> {
     try {
+      this.logger.log(`[ImportService] Starting import - Disciplines: ${parsed.disciplines.length}, Types: ${parsed.disciplineTypes.length}, Patterns: ${parsed.alarmPatterns.length}, Classes: ${parsed.classes.length}, Fields: ${parsed.fields.length}`);
+
       const result: ImportResult = {
         disciplinesCreated: 0,
         disciplineTypesCreated: 0,
@@ -114,8 +122,11 @@ export class ImportService {
       // Phase 5: Import fields
       await this.importFields(parsed, result, idMapping, overwriteExisting);
 
+      this.logger.log(`[ImportService] Import completed - Created: ${result.disciplinesCreated} disciplines, ${result.disciplineTypesCreated} types, ${result.alarmPatternsCreated} patterns, ${result.classesCreated} classes, ${result.fieldsCreated} fields. Errors: ${result.errors.length}`);
+
       return result;
     } catch (error) {
+      this.logger.error(`[ImportService] Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw new DatabaseError('Failed to import parsed configuration', { error });
     }
   }
@@ -129,6 +140,8 @@ export class ImportService {
     idMapping: IdMapping,
     overwriteExisting: boolean
   ): Promise<void> {
+    this.logger.log(`[ImportService] Phase 1: Importing ${parsed.disciplines.length} disciplines`);
+
     for (const discipline of parsed.disciplines) {
       try {
         // Check if exists
@@ -170,6 +183,8 @@ export class ImportService {
     idMapping: IdMapping,
     overwriteExisting: boolean
   ): Promise<void> {
+    this.logger.log(`[ImportService] Phase 2: Importing ${parsed.disciplineTypes.length} discipline types`);
+
     for (const type of parsed.disciplineTypes) {
       try {
         const disciplineId = idMapping.disciplines.get(type.disciplineName);
@@ -217,6 +232,8 @@ export class ImportService {
     idMapping: IdMapping,
     overwriteExisting: boolean
   ): Promise<void> {
+    this.logger.log(`[ImportService] Phase 3: Importing ${parsed.alarmPatterns.length} alarm patterns`);
+
     for (const pattern of parsed.alarmPatterns) {
       try {
         const key = `${pattern.disciplineName}:${pattern.disciplineTypeName}`;
@@ -291,6 +308,8 @@ export class ImportService {
     idMapping: IdMapping,
     overwriteExisting: boolean
   ): Promise<void> {
+    this.logger.log(`[ImportService] Phase 4: Importing ${parsed.classes.length} classes`);
+
     for (const cls of parsed.classes) {
       try {
         const key = `${cls.disciplineName}:${cls.disciplineTypeName}`;
@@ -351,6 +370,8 @@ export class ImportService {
     idMapping: IdMapping,
     overwriteExisting: boolean
   ): Promise<void> {
+    this.logger.log(`[ImportService] Phase 5: Importing ${parsed.fields.length} fields`);
+
     for (const field of parsed.fields) {
       try {
         const key = `${field.disciplineName}:${field.disciplineTypeName}`;

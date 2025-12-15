@@ -8,6 +8,7 @@ import type { FunctionContext, RouteParams } from '../types.js';
 import { sendSuccess, handleError, parseBody } from '../utils/response.js';
 import { ImportService } from '@lib/services/import.service.js';
 import { ValidationError } from '@lib/utils/errors.js';
+import { createLogger } from '@lib/types/logger.js';
 
 // Request schema for import
 const ImportRequestSchema = z.object({
@@ -43,7 +44,9 @@ export async function importConfig(
 
     log(`Importing ${configs.length} configuration(s), overwrite: ${overwriteExisting}`);
 
-    const importService = new ImportService();
+    // Create logger and pass to service
+    const logger = createLogger(context);
+    const importService = new ImportService(logger);
 
     let result;
     if (configs.length === 1) {

@@ -8,6 +8,8 @@ import { BaseRepository, type PaginatedResult } from './base.repository.js';
 import { COLLECTION_IDS, type ClassEntity, type FieldEntity } from '../types/entities.js';
 import type { ClassDTO, FieldDTO, SeverityThreshold, ClassPattern } from '../types/dtos.js';
 import { NotFoundError, ConflictError, DatabaseError } from '../utils/errors.js';
+import type { Logger } from '../types/logger.js';
+import { createNoOpLogger } from '../types/logger.js';
 
 /**
  * Parse JSON data field safely
@@ -33,8 +35,11 @@ function stringifyField(data: unknown): string | null {
  * Repository for managing classes
  */
 export class ClassRepository extends BaseRepository<ClassEntity> {
-  constructor() {
+  private logger: Logger;
+
+  constructor(logger?: Logger) {
     super(COLLECTION_IDS.CLASSES);
+    this.logger = logger || createNoOpLogger();
   }
 
   /**
@@ -59,11 +64,13 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
     classId: string
   ): Promise<ClassEntity | null> {
     try {
+      this.logger.log(`[ClassRepository] Finding class: ${classId} for discipline type: ${disciplineTypeId}`);
       return await this.findOneWhere([
         Query.equal('disciplineTypeId', disciplineTypeId),
         Query.equal('classId', classId),
       ]);
     } catch (error) {
+      this.logger.error(`[ClassRepository] Error finding class '${classId}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw new DatabaseError(`Failed to find class ${classId} for discipline type: ${disciplineTypeId}`, { error });
     }
   }
@@ -95,6 +102,8 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
     patterns?: ClassPattern[];
   }): Promise<ClassEntity> {
     try {
+      this.logger.log(`[ClassRepository] Creating class: ${data.classId} for discipline type: ${data.disciplineTypeId}`);
+
       // Check if class already exists
       const existing = await this.findByDisciplineTypeAndClassId(
         data.disciplineTypeId,
@@ -106,7 +115,7 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
         );
       }
 
-      return await this.create({
+      const result = await this.create({
         disciplineTypeId: data.disciplineTypeId,
         classId: data.classId,
         description: data.description,
@@ -115,7 +124,11 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
         patterns: stringifyField(data.patterns),
         createdAt: new Date().toISOString(),
       });
+
+      this.logger.log(`[ClassRepository] Created class: ${data.classId} (ID: ${result.$id})`);
+      return result;
     } catch (error) {
+      this.logger.error(`[ClassRepository] Error creating class '${data.classId}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof ConflictError) throw error;
       throw new DatabaseError(`Failed to create class: ${data.classId}`, { error });
     }
@@ -134,6 +147,8 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
     }>
   ): Promise<ClassEntity> {
     try {
+      this.logger.log(`[ClassRepository] Updating class: ${id}`);
+
       const existing = await this.findByIdOrFail(id, 'Class');
 
       const updateData: Partial<ClassEntity> = {};
@@ -151,8 +166,11 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
         updateData.patterns = stringifyField(data.patterns);
       }
 
-      return await this.update(id, updateData);
+      const result = await this.update(id, updateData);
+      this.logger.log(`[ClassRepository] Updated class: ${id}`);
+      return result;
     } catch (error) {
+      this.logger.error(`[ClassRepository] Error updating class '${id}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof NotFoundError) throw error;
       throw new DatabaseError(`Failed to update class: ${id}`, { error });
     }
@@ -191,8 +209,11 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
  * Repository for managing fields
  */
 export class FieldRepository extends BaseRepository<FieldEntity> {
-  constructor() {
+  private logger: Logger;
+
+  constructor(logger?: Logger) {
     super(COLLECTION_IDS.FIELDS);
+    this.logger = logger || createNoOpLogger();
   }
 
   /**
@@ -217,11 +238,13 @@ export class FieldRepository extends BaseRepository<FieldEntity> {
     name: string
   ): Promise<FieldEntity | null> {
     try {
+      this.logger.log(`[FieldRepository] Finding field: ${name} for discipline type: ${disciplineTypeId}`);
       return await this.findOneWhere([
         Query.equal('disciplineTypeId', disciplineTypeId),
         Query.equal('name', name),
       ]);
     } catch (error) {
+      this.logger.error(`[FieldRepository] Error finding field '${name}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw new DatabaseError(`Failed to find field ${name} for discipline type: ${disciplineTypeId}`, { error });
     }
   }
@@ -238,6 +261,8 @@ export class FieldRepository extends BaseRepository<FieldEntity> {
     fieldType2?: string;
   }): Promise<FieldEntity> {
     try {
+      this.logger.log(`[FieldRepository] Creating field: ${data.name} for discipline type: ${data.disciplineTypeId}`);
+
       // Check if field already exists
       const existing = await this.findByDisciplineTypeAndName(
         data.disciplineTypeId,
@@ -249,7 +274,7 @@ export class FieldRepository extends BaseRepository<FieldEntity> {
         );
       }
 
-      return await this.create({
+      const result = await this.create({
         disciplineTypeId: data.disciplineTypeId,
         name: data.name,
         arrayType: data.arrayType || null,
@@ -258,7 +283,11 @@ export class FieldRepository extends BaseRepository<FieldEntity> {
         fieldType2: data.fieldType2 || null,
         createdAt: new Date().toISOString(),
       });
+
+      this.logger.log(`[FieldRepository] Created field: ${data.name} (ID: ${result.$id})`);
+      return result;
     } catch (error) {
+      this.logger.error(`[FieldRepository] Error creating field '${data.name}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof ConflictError) throw error;
       throw new DatabaseError(`Failed to create field: ${data.name}`, { error });
     }

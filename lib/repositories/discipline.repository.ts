@@ -9,13 +9,18 @@ import { COLLECTION_IDS, type DisciplineEntity, type DisciplineTypeEntity } from
 import type { DisciplineDTO, DisciplineTypeDTO } from '../types/dtos.js';
 import { getDatabases, getDatabaseId, generateId } from '../utils/db.js';
 import { ConflictError, DatabaseError, NotFoundError } from '../utils/errors.js';
+import type { Logger } from '../types/logger.js';
+import { createNoOpLogger } from '../types/logger.js';
 
 /**
  * Repository for managing disciplines
  */
 export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
-  constructor() {
+  private logger: Logger;
+
+  constructor(logger?: Logger) {
     super(COLLECTION_IDS.DISCIPLINES);
+    this.logger = logger || createNoOpLogger();
   }
 
   /**
@@ -23,8 +28,10 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
    */
   async findByName(name: string): Promise<DisciplineEntity | null> {
     try {
+      this.logger.log(`[DisciplineRepository] Finding discipline by name: ${name}`);
       return await this.findOneWhere([Query.equal('name', name)]);
     } catch (error) {
+      this.logger.error(`[DisciplineRepository] Error finding discipline by name '${name}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw new DatabaseError(`Failed to find discipline by name: ${name}`, { error });
     }
   }
@@ -90,6 +97,8 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
     enterpriseVersion: number;
   }): Promise<DisciplineEntity> {
     try {
+      this.logger.log(`[DisciplineRepository] Creating discipline: ${data.name}`);
+
       // Check if discipline with same name exists
       const existing = await this.findByName(data.name);
       if (existing) {
@@ -97,12 +106,16 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
       }
 
       const now = new Date().toISOString();
-      return await this.create({
+      const result = await this.create({
         ...data,
         createdAt: now,
         updatedAt: now,
       });
+
+      this.logger.log(`[DisciplineRepository] Created discipline: ${data.name} (ID: ${result.$id})`);
+      return result;
     } catch (error) {
+      this.logger.error(`[DisciplineRepository] Error creating discipline '${data.name}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof ConflictError) throw error;
       throw new DatabaseError(`Failed to create discipline: ${data.name}`, { error });
     }
@@ -117,6 +130,8 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
     enterpriseVersion: number;
   }>): Promise<DisciplineEntity> {
     try {
+      this.logger.log(`[DisciplineRepository] Updating discipline: ${id}`);
+
       // Verify discipline exists
       await this.findByIdOrFail(id, 'Discipline');
 
@@ -128,11 +143,15 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
         }
       }
 
-      return await this.update(id, {
+      const result = await this.update(id, {
         ...data,
         updatedAt: new Date().toISOString(),
       });
+
+      this.logger.log(`[DisciplineRepository] Updated discipline: ${id}`);
+      return result;
     } catch (error) {
+      this.logger.error(`[DisciplineRepository] Error updating discipline '${id}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof ConflictError || error instanceof NotFoundError) throw error;
       throw new DatabaseError(`Failed to update discipline: ${id}`, { error });
     }
@@ -157,8 +176,11 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
  * Repository for managing discipline types
  */
 export class DisciplineTypeRepository extends BaseRepository<DisciplineTypeEntity> {
-  constructor() {
+  private logger: Logger;
+
+  constructor(logger?: Logger) {
     super(COLLECTION_IDS.DISCIPLINE_TYPES);
+    this.logger = logger || createNoOpLogger();
   }
 
   /**
@@ -177,11 +199,13 @@ export class DisciplineTypeRepository extends BaseRepository<DisciplineTypeEntit
    */
   async findByDisciplineAndName(disciplineId: string, name: string): Promise<DisciplineTypeEntity | null> {
     try {
+      this.logger.log(`[DisciplineTypeRepository] Finding discipline type: ${name} for discipline: ${disciplineId}`);
       return await this.findOneWhere([
         Query.equal('disciplineId', disciplineId),
         Query.equal('name', name),
       ]);
     } catch (error) {
+      this.logger.error(`[DisciplineTypeRepository] Error finding discipline type '${name}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw new DatabaseError(`Failed to find discipline type by name: ${name}`, { error });
     }
   }
@@ -206,7 +230,7 @@ export class DisciplineTypeRepository extends BaseRepository<DisciplineTypeEntit
       const type = await this.findById(typeId);
       if (!type) return null;
 
-      const disciplineRepo = new DisciplineRepository();
+      const disciplineRepo = new DisciplineRepository(this.logger);
       const discipline = await disciplineRepo.findById(type.disciplineId);
 
       return {
@@ -232,6 +256,8 @@ export class DisciplineTypeRepository extends BaseRepository<DisciplineTypeEntit
     name: string;
   }): Promise<DisciplineTypeEntity> {
     try {
+      this.logger.log(`[DisciplineTypeRepository] Creating discipline type: ${data.name} for discipline: ${data.disciplineId}`);
+
       // Check if type with same name exists under this discipline
       const existing = await this.findByDisciplineAndName(data.disciplineId, data.name);
       if (existing) {
@@ -240,11 +266,15 @@ export class DisciplineTypeRepository extends BaseRepository<DisciplineTypeEntit
         );
       }
 
-      return await this.create({
+      const result = await this.create({
         ...data,
         createdAt: new Date().toISOString(),
       });
+
+      this.logger.log(`[DisciplineTypeRepository] Created discipline type: ${data.name} (ID: ${result.$id})`);
+      return result;
     } catch (error) {
+      this.logger.error(`[DisciplineTypeRepository] Error creating discipline type '${data.name}': ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (error instanceof ConflictError) throw error;
       throw new DatabaseError(`Failed to create discipline type: ${data.name}`, { error });
     }
@@ -255,7 +285,7 @@ export class DisciplineTypeRepository extends BaseRepository<DisciplineTypeEntit
    */
   async findByDisciplineIdWithContext(disciplineId: string): Promise<DisciplineTypeDTO[]> {
     try {
-      const disciplineRepo = new DisciplineRepository();
+      const disciplineRepo = new DisciplineRepository(this.logger);
       const discipline = await disciplineRepo.findById(disciplineId);
 
       const { documents: types } = await this.findByDisciplineId(disciplineId);
