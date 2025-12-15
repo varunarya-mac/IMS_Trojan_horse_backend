@@ -14,7 +14,6 @@ import { ClassRepository } from './class.repository.js';
 import { NotFoundError, ConflictError, DatabaseError } from '../utils/errors.js';
 import { generateId } from '../utils/db.js';
 import type { Logger } from '../types/logger.js';
-import { createNoOpLogger } from '../types/logger.js';
 
 /**
  * Input data for creating a new alarm pattern
@@ -52,11 +51,8 @@ export interface UpdateAlarmPatternInput {
  * Repository for managing alarm patterns with versioning
  */
 export class AlarmFlowRepository extends BaseRepository<AlarmPatternEntity> {
-  private logger: Logger;
-
   constructor(logger?: Logger) {
-    super(COLLECTION_IDS.ALARM_PATTERNS);
-    this.logger = logger || createNoOpLogger();
+    super(COLLECTION_IDS.ALARM_PATTERNS, logger);
   }
 
   /**

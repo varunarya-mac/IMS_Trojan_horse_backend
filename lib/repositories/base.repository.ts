@@ -7,6 +7,8 @@ import { Query, type Models } from 'node-appwrite';
 import { getDatabases, getDatabaseId, generateId, getPaginationQueries } from '../utils/db.js';
 import { DatabaseError, NotFoundError } from '../utils/errors.js';
 import type { BaseEntity } from '../types/entities.js';
+import type { Logger } from '../types/logger.js';
+import { createNoOpLogger } from '../types/logger.js';
 
 /**
  * Pagination result interface
@@ -36,10 +38,12 @@ export interface QueryOptions {
 export abstract class BaseRepository<T extends BaseEntity> {
   protected readonly collectionId: string;
   protected readonly databaseId: string;
+  protected readonly logger: Logger;
 
-  constructor(collectionId: string) {
+  constructor(collectionId: string, logger?: Logger) {
     this.collectionId = collectionId;
     this.databaseId = getDatabaseId();
+    this.logger = logger || createNoOpLogger();
   }
 
   /**
@@ -99,6 +103,9 @@ export abstract class BaseRepository<T extends BaseEntity> {
         );
       }
 
+      // Debug logging for database query
+      this.logger.log(`[BaseRepository] Querying database - DB: ${this.databaseId}, Collection: ${this.collectionId}, Queries: ${JSON.stringify(queries)}, Page: ${page}, Limit: ${limit}`);
+
       const result = await this.databases.listDocuments(
         this.databaseId,
         this.collectionId,
@@ -113,6 +120,10 @@ export abstract class BaseRepository<T extends BaseEntity> {
         hasMore: page * limit < result.total,
       };
     } catch (error: unknown) {
+      // Debug logging for database errors
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorType = error?.constructor?.name || 'Unknown';
+      this.logger.error(`[BaseRepository] Database query failed - DB: ${this.databaseId}, Collection: ${this.collectionId}, Error Type: ${errorType}, Message: ${errorMsg}`);
       throw new DatabaseError('Failed to list documents', { error });
     }
   }

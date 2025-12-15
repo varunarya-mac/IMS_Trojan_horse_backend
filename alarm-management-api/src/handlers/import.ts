@@ -42,7 +42,7 @@ export async function importConfig(
 
     const { configs, overwriteExisting } = validation.data;
 
-    log(`Importing ${configs.length} configuration(s), overwrite: ${overwriteExisting}`);
+    log(`Importing ${configs.length} configuration(s)`);
 
     // Create logger and pass to service
     const logger = createLogger(context);
@@ -55,7 +55,7 @@ export async function importConfig(
       result = await importService.importMultipleConfigs(configs, overwriteExisting);
     }
 
-    log(`Import completed: ${JSON.stringify(result)}`);
+    log(`Import completed`);
 
     return sendSuccess(res, result);
   } catch (error) {

@@ -9,7 +9,6 @@ import { COLLECTION_IDS, type ClassEntity, type FieldEntity } from '../types/ent
 import type { ClassDTO, FieldDTO, SeverityThreshold, ClassPattern } from '../types/dtos.js';
 import { NotFoundError, ConflictError, DatabaseError } from '../utils/errors.js';
 import type { Logger } from '../types/logger.js';
-import { createNoOpLogger } from '../types/logger.js';
 
 /**
  * Parse JSON data field safely
@@ -35,11 +34,8 @@ function stringifyField(data: unknown): string | null {
  * Repository for managing classes
  */
 export class ClassRepository extends BaseRepository<ClassEntity> {
-  private logger: Logger;
-
   constructor(logger?: Logger) {
-    super(COLLECTION_IDS.CLASSES);
-    this.logger = logger || createNoOpLogger();
+    super(COLLECTION_IDS.CLASSES, logger);
   }
 
   /**
@@ -209,11 +205,8 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
  * Repository for managing fields
  */
 export class FieldRepository extends BaseRepository<FieldEntity> {
-  private logger: Logger;
-
   constructor(logger?: Logger) {
-    super(COLLECTION_IDS.FIELDS);
-    this.logger = logger || createNoOpLogger();
+    super(COLLECTION_IDS.FIELDS, logger);
   }
 
   /**

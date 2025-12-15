@@ -10,17 +10,13 @@ import type { DisciplineDTO, DisciplineTypeDTO } from '../types/dtos.js';
 import { getDatabases, getDatabaseId, generateId } from '../utils/db.js';
 import { ConflictError, DatabaseError, NotFoundError } from '../utils/errors.js';
 import type { Logger } from '../types/logger.js';
-import { createNoOpLogger } from '../types/logger.js';
 
 /**
  * Repository for managing disciplines
  */
 export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
-  private logger: Logger;
-
   constructor(logger?: Logger) {
-    super(COLLECTION_IDS.DISCIPLINES);
-    this.logger = logger || createNoOpLogger();
+    super(COLLECTION_IDS.DISCIPLINES, logger);
   }
 
   /**
@@ -176,11 +172,8 @@ export class DisciplineRepository extends BaseRepository<DisciplineEntity> {
  * Repository for managing discipline types
  */
 export class DisciplineTypeRepository extends BaseRepository<DisciplineTypeEntity> {
-  private logger: Logger;
-
   constructor(logger?: Logger) {
-    super(COLLECTION_IDS.DISCIPLINE_TYPES);
-    this.logger = logger || createNoOpLogger();
+    super(COLLECTION_IDS.DISCIPLINE_TYPES, logger);
   }
 
   /**
