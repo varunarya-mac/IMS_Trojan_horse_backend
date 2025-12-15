@@ -25,7 +25,7 @@ import { sendError } from './utils/response.js';
 /**
  * Main function handler
  */
-export default async function (context: FunctionContext): Promise<void> {
+export default async function (context: FunctionContext): Promise<unknown> {
   const { req, res, log, error: logError } = context;
 
   // Log incoming request
@@ -33,17 +33,16 @@ export default async function (context: FunctionContext): Promise<void> {
 
   // Handle OPTIONS for CORS preflight
   if (req.method === 'OPTIONS') {
-    res.send('', 204, {
+    return res.send('', 204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, x-user-id, x-appwrite-user-id',
     });
-    return;
   }
 
   // Handle root path - return API info
   if (req.path === '/' || req.path === '') {
-    res.json({
+    return res.json({
       success: true,
       data: {
         name: 'Alarm Management API',
@@ -51,7 +50,6 @@ export default async function (context: FunctionContext): Promise<void> {
         routes: getAvailableRoutes(),
       },
     });
-    return;
   }
 
   try {
