@@ -22,7 +22,9 @@
   },
   "include": [
     "lib/**/*",
-    "alarm-management-api/**/*"
+    "alarm-management-api/**/*",
+    "functions/**/*",
+    "scripts/**/*"
   ],
   "exclude": [
     "node_modules",

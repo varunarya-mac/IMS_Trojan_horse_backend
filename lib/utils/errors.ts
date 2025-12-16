@@ -137,6 +137,65 @@ export class ImportError extends ApiError {
 }
 
 /**
+ * Guardrail error - for content filtering rejections
+ */
+export class GuardrailError extends ApiError {
+  public readonly suggestion?: string;
+
+  constructor(message: string, suggestion?: string) {
+    super(message, 'GUARDRAIL_REJECTED', 400, { suggestion });
+    this.name = 'GuardrailError';
+    this.suggestion = suggestion;
+  }
+}
+
+/**
+ * CSV validation error
+ */
+export class CSVValidationError extends ApiError {
+  constructor(message: string, details?: unknown) {
+    super(message, 'CSV_VALIDATION_ERROR', 400, details);
+    this.name = 'CSVValidationError';
+  }
+}
+
+/**
+ * Job processing error
+ */
+export class JobProcessingError extends ApiError {
+  public readonly retryable: boolean;
+
+  constructor(message: string, retryable: boolean = false, details?: unknown) {
+    super(message, 'JOB_PROCESSING_ERROR', 500, { ...details as object, retryable });
+    this.name = 'JobProcessingError';
+    this.retryable = retryable;
+  }
+}
+
+/**
+ * OpenAI service error
+ */
+export class OpenAIError extends ApiError {
+  public readonly retryable: boolean;
+
+  constructor(message: string, retryable: boolean = true, details?: unknown) {
+    super(message, 'OPENAI_ERROR', 502, { ...details as object, retryable });
+    this.name = 'OpenAIError';
+    this.retryable = retryable;
+  }
+}
+
+/**
+ * Storage error
+ */
+export class StorageError extends ApiError {
+  constructor(message: string, details?: unknown) {
+    super(message, 'STORAGE_ERROR', 500, details);
+    this.name = 'StorageError';
+  }
+}
+
+/**
  * Error handler utility
  */
 export function handleError(error: unknown): ApiError {

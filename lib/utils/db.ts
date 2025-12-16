@@ -3,7 +3,7 @@
  * Appwrite SDK initialization and helper functions
  */
 
-import { Client, Databases, ID, Query } from 'node-appwrite';
+import { Client, Databases, Storage, Functions, ID, Query } from 'node-appwrite';
 import { COLLECTION_IDS } from '../types/entities.js';
 
 /**
@@ -35,10 +35,22 @@ export function getConfig(): AppwriteConfig {
 }
 
 /**
+ * Storage bucket IDs
+ * Using single bucket for all refrigeration files (CSV uploads + generated graphs)
+ */
+export const BUCKET_IDS = {
+  REFRIGERATION_FILES: process.env.REFRIGERATION_BUCKET_ID || 'refrigeration-files',
+} as const;
+
+export type BucketId = typeof BUCKET_IDS[keyof typeof BUCKET_IDS];
+
+/**
  * Singleton client instance
  */
 let clientInstance: Client | null = null;
 let databasesInstance: Databases | null = null;
+let storageInstance: Storage | null = null;
+let functionsInstance: Functions | null = null;
 
 /**
  * Get or create Appwrite client
@@ -62,6 +74,26 @@ export function getDatabases(): Databases {
     databasesInstance = new Databases(getClient());
   }
   return databasesInstance;
+}
+
+/**
+ * Get or create Storage instance
+ */
+export function getStorage(): Storage {
+  if (!storageInstance) {
+    storageInstance = new Storage(getClient());
+  }
+  return storageInstance;
+}
+
+/**
+ * Get or create Functions instance
+ */
+export function getFunctions(): Functions {
+  if (!functionsInstance) {
+    functionsInstance = new Functions(getClient());
+  }
+  return functionsInstance;
 }
 
 /**
@@ -156,4 +188,6 @@ export function getPaginationQueries(page: number, limit: number): string[] {
 export function resetClient(): void {
   clientInstance = null;
   databasesInstance = null;
+  storageInstance = null;
+  functionsInstance = null;
 }

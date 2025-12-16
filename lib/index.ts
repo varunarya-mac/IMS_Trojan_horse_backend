@@ -3,11 +3,21 @@
  * Main entry point and exports
  */
 
-// Types
+// Types - Core
 export * from './types/entities.js';
 export * from './types/dtos.js';
 export * from './types/requests.js';
 export * from './types/program-modules.js';
+
+// Types - IoT Refrigeration Chat
+export * from './types/chat.types.js';
+export * from './types/message.types.js';
+export * from './types/job.types.js';
+export * from './types/csv.types.js';
+export * from './types/analysis.types.js';
+
+// Constants
+export * from './constants/index.js';
 
 // Utilities
 export * from './utils/db.js';

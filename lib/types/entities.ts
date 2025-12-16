@@ -86,11 +86,17 @@ export interface FieldEntity extends BaseEntity {
  * Collection IDs for Appwrite
  */
 export const COLLECTION_IDS = {
+  // Alarm Management collections
   DISCIPLINES: 'disciplines',
   DISCIPLINE_TYPES: 'discipline_types',
   ALARM_PATTERNS: 'alarm_patterns',
   CLASSES: 'classes',
   FIELDS: 'fields',
+
+  // IoT Refrigeration Chat collections
+  CHATS: 'chats',
+  MESSAGES: 'messages',
+  PROCESSING_JOBS: 'processing_jobs',
 } as const;
 
 export type CollectionId = typeof COLLECTION_IDS[keyof typeof COLLECTION_IDS];
