@@ -10,10 +10,10 @@ import { sendSuccess, handleError, getRequestData, parseBody } from '../utils/re
 import { AlarmFlowRepository } from '@lib/repositories/alarm-flow.repository.js';
 import { VersioningService } from '@lib/services/versioning.service.js';
 import { ValidationError, NotFoundError } from '@lib/utils/errors.js';
+import type { ProgramModule } from '@lib/types/program-modules.js';
 import {
   CreateAlarmPatternSchema,
   UpdateAlarmPatternSchema,
-  ProgramModuleSchema,
 } from '@lib/utils/validation.js';
 
 // Request schemas for this handler
@@ -167,6 +167,17 @@ export async function updateAlarmPattern(
     }
 
     // Create a flexible update schema
+    // Define program module schema inline to avoid Zod version conflicts
+    const LocalProgramModuleSchema = z.object({
+      type: z.number().int().min(0).max(39),
+      x: z.number(),
+      y: z.number(),
+      name: z.string().min(1),
+      inputs: z.array(z.string()).optional(),
+      classes: z.array(z.string()).optional(),
+      parameters: z.array(z.string()).optional(),
+    });
+
     const UpdateRequestSchema = z.object({
       textExpr: z.string().min(1).max(512).optional(),
       genericFamily: z.string().min(1).max(64).optional(),
@@ -174,7 +185,7 @@ export async function updateAlarmPattern(
       trapPdu1: z.string().max(128).optional(),
       trapFlag: z.number().int().min(0).max(1).optional(),
       suppressionPeriod: z.number().min(0).optional(),
-      programModules: z.array(ProgramModuleSchema).optional(),
+      programModules: z.array(LocalProgramModuleSchema).optional(),
       changeDescription: z.string().min(1).max(512).optional(),
     });
 
@@ -195,16 +206,27 @@ export async function updateAlarmPattern(
     const currentPattern = await versioningService.getLatestVersion(alarmPatternKey);
     const currentVersion = currentPattern.version;
 
+    // Type-safe updates with ProgramModule[] type
+    const typedUpdates = updates as Partial<{
+      textExpr: string;
+      genericFamily: string;
+      genericId: string;
+      trapPdu1: string;
+      trapFlag: number;
+      suppressionPeriod: number;
+      programModules: ProgramModule[];
+    }>;
+
     // Generate change description if not provided
     let description = changeDescription;
     if (!description) {
-      description = versioningService.generateChangeDescription(currentPattern, updates);
+      description = versioningService.generateChangeDescription(currentPattern, typedUpdates);
     }
 
     // Create new version with proper parameters
     const newPattern = await versioningService.createNewVersion(
       alarmPatternKey,
-      updates,
+      typedUpdates,
       userId || 'system',
       description
     );

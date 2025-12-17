@@ -139,13 +139,21 @@ export class ImportError extends ApiError {
 /**
  * Guardrail error - for content filtering rejections
  */
+export interface GuardrailErrorDetails {
+  suggestion?: string;
+  matchedKeywords?: string[];
+  detectedColumns?: string[];
+}
+
 export class GuardrailError extends ApiError {
   public readonly suggestion?: string;
+  public readonly details?: GuardrailErrorDetails;
 
-  constructor(message: string, suggestion?: string) {
-    super(message, 'GUARDRAIL_REJECTED', 400, { suggestion });
+  constructor(message: string, details?: GuardrailErrorDetails) {
+    super(message, 'GUARDRAIL_REJECTED', 400, details);
     this.name = 'GuardrailError';
-    this.suggestion = suggestion;
+    this.suggestion = details?.suggestion;
+    this.details = details;
   }
 }
 

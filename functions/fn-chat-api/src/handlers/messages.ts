@@ -233,5 +233,6 @@ function toMessageDTO(message: MessageEntity): MessageDTO {
     processingTime: message.processingTime,
     tokenUsage: message.tokenUsage ? JSON.parse(message.tokenUsage) : null,
     createdAt: message.$createdAt,
+    graphImageUrl: null
   };
 }

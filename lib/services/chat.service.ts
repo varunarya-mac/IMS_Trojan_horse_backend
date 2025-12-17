@@ -8,8 +8,8 @@ import { MessageRepository } from '../repositories/message.repository.js';
 import { JobRepository } from '../repositories/job.repository.js';
 import { getStorage, BUCKET_IDS } from '../utils/db.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
-import type { ChatEntity } from '../types/entities.js';
 import type {
+  ChatEntity,
   ChatDTO,
   ChatListItemDTO,
   ChatStatus,

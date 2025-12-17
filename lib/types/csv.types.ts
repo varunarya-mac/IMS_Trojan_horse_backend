@@ -3,8 +3,44 @@
  * These interfaces represent CSV validation and parsing structures
  */
 
-import type { CSVMetadata, StoreInfo, DeviceType } from './chat.types.js';
 import type { AlertPoint } from './message.types.js';
+import type { DeviceType, CSVMetadata, StoreInfo } from './chat.types.js';
+
+/**
+ * Time range for CSV data
+ */
+export interface TimeRange {
+  start: string;
+  end: string;
+  durationHours?: number;
+  dataPointCount?: number;
+}
+
+/**
+ * Extracted store info from CSV metadata extraction
+ */
+export interface ExtractedStoreInfo {
+  storeId?: string;
+  storeName?: string;
+  multipleStores?: boolean;
+  storeCount?: number;
+}
+
+/**
+ * Extracted CSV metadata from metadata extraction service
+ */
+export interface ExtractedCSVMetadata {
+  fileId: string;
+  fileName: string;
+  fileSize: number;
+  rowCount: number;
+  columnCount: number;
+  columns: string[];
+  timeRange: TimeRange | null;
+  columnStats: ColumnStatistics[];
+  detectedDeviceType: DeviceType | null;
+  detectedStoreInfo: ExtractedStoreInfo | null;
+}
 
 /**
  * CSV error code enum
@@ -30,9 +66,9 @@ export type AnomalyType =
   | 'rapid_change';
 
 /**
- * CSV validation error
+ * CSV validation error detail
  */
-export interface CSVValidationError {
+export interface CSVValidationIssue {
   code: CSVErrorCode;
   message: string;
   details?: Record<string, unknown>;
@@ -51,11 +87,13 @@ export interface CSVValidationWarning {
  */
 export interface CSVValidationResult {
   isValid: boolean;
-  errors: CSVValidationError[];
-  warnings: CSVValidationWarning[];
-  detectedType: DeviceType | null;
+  errors: string[];
+  warnings: string[];
+  columnCount: number;
+  rowCount: number;
   detectedColumns: string[];
-  missingRequiredColumns: string[];
+  missingColumns: string[];
+  extraColumns: string[];
 }
 
 /**
@@ -78,8 +116,17 @@ export interface RefrigerationColumnSchema {
  * Column statistics for numeric/string columns
  */
 export interface ColumnStatistics {
-  columnName: string;
-  dataType: 'number' | 'string' | 'boolean' | 'datetime';
+  /** Column name */
+  column: string;
+
+  /** Alternate field name (for compatibility) */
+  columnName?: string;
+
+  /** Data type */
+  type: 'numeric' | 'string' | 'boolean' | 'datetime';
+
+  /** Alternate field name (for compatibility) */
+  dataType?: 'number' | 'string' | 'boolean' | 'datetime';
 
   /** For numeric columns */
   min?: number;
@@ -87,12 +134,28 @@ export interface ColumnStatistics {
   mean?: number;
   stdDev?: number;
 
+  /** Percentiles for numeric columns */
+  percentile25?: number;
+  percentile50?: number;
+  percentile75?: number;
+
   /** For all columns */
   nullCount: number;
   uniqueCount: number;
 
   /** Sample values */
   sampleValues: (string | number | boolean)[];
+}
+
+/**
+ * Column information from CSV analysis
+ */
+export interface ColumnInfo {
+  name: string;
+  type: 'numeric' | 'boolean' | 'datetime' | 'string' | 'unknown';
+  sampleValues: string[];
+  nullCount: number;
+  uniqueCount: number;
 }
 
 /**

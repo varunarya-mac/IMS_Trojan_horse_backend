@@ -5,11 +5,12 @@
 
 import type { CSVRow } from '../types.js';
 import type {
-  CSVMetadata,
+  ExtractedCSVMetadata,
   ColumnStatistics,
   TimeRange,
+  ExtractedStoreInfo,
 } from '@lib/types/csv.types.js';
-import type { StoreInfo, DeviceType } from '@lib/types/chat.types.js';
+import type { DeviceType } from '@lib/types/chat.types.js';
 
 /**
  * Metadata Extractor Service
@@ -22,7 +23,7 @@ export class MetadataExtractorService {
     headers: string[],
     rows: CSVRow[],
     fileInfo: { fileId: string; fileName: string; fileSize: number }
-  ): CSVMetadata {
+  ): ExtractedCSVMetadata {
     const timeRange = this.extractTimeRange(rows, headers);
     const columnStats = this.calculateColumnStatistics(headers, rows);
     const storeInfo = this.detectStoreInfo(headers, rows);
@@ -130,7 +131,7 @@ export class MetadataExtractorService {
   /**
    * Detect store information from data
    */
-  detectStoreInfo(headers: string[], rows: CSVRow[]): StoreInfo | null {
+  detectStoreInfo(headers: string[], rows: CSVRow[]): ExtractedStoreInfo | null {
     // Look for store-related columns
     const storeCol = headers.find(h =>
       h.toLowerCase().includes('store') ||
@@ -251,7 +252,7 @@ export class MetadataExtractorService {
   extractSummaryForAnalysis(
     headers: string[],
     rows: CSVRow[],
-    metadata: CSVMetadata
+    metadata: ExtractedCSVMetadata
   ): string {
     const lines: string[] = [];
 

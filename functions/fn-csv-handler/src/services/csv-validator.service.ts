@@ -33,19 +33,67 @@ export class CSVValidatorService {
     // Normalize headers
     const normalizedHeaders = headers.map(h => h.trim().toLowerCase());
 
-    // Check for required columns
+    // Check for required columns based on detected data type (case, pack, or both)
     const missingRequired: string[] = [];
-    for (const required of REQUIRED_COLUMNS) {
-      const found = normalizedHeaders.some(
-        h => h === required.toLowerCase() || h.includes(required.toLowerCase())
-      );
-      if (!found) {
-        missingRequired.push(required);
+
+    // Check for timestamp (universally required)
+    const hasTimestamp = normalizedHeaders.some(
+      h => h === 'timestamp' || h.includes('timestamp')
+    );
+    if (!hasTimestamp) {
+      missingRequired.push('timestamp');
+    }
+
+    // Detect if this is case data, pack data, or both
+    const hasCaseIndicators = normalizedHeaders.some(
+      h => h.includes('state_case') || h.includes('case_id') || h.includes('air_on') || h.includes('air_off')
+    );
+    const hasPackIndicators = normalizedHeaders.some(
+      h => h.includes('state_pack') || h.includes('pack_id') || h.includes('suction')
+    );
+
+    // Validate case-specific required columns
+    if (hasCaseIndicators) {
+      for (const col of REQUIRED_COLUMNS.case.required) {
+        if (col === 'timestamp') continue; // Already checked
+        const found = normalizedHeaders.some(h => h === col.toLowerCase() || h.includes(col.toLowerCase()));
+        if (!found) {
+          missingRequired.push(col);
+        }
+      }
+      // Check atLeastOne conditions for case
+      for (const group of REQUIRED_COLUMNS.case.atLeastOne) {
+        const hasAny = group.some(col =>
+          normalizedHeaders.some(h => h === col.toLowerCase() || h.includes(col.toLowerCase()))
+        );
+        if (!hasAny) {
+          warnings.push(`Missing at least one of: ${group.join(', ')}`);
+        }
+      }
+    }
+
+    // Validate pack-specific required columns
+    if (hasPackIndicators) {
+      for (const col of REQUIRED_COLUMNS.pack.required) {
+        if (col === 'timestamp') continue; // Already checked
+        const found = normalizedHeaders.some(h => h === col.toLowerCase() || h.includes(col.toLowerCase()));
+        if (!found) {
+          missingRequired.push(col);
+        }
+      }
+      // Check atLeastOne conditions for pack
+      for (const group of REQUIRED_COLUMNS.pack.atLeastOne) {
+        const hasAny = group.some(col =>
+          normalizedHeaders.some(h => h === col.toLowerCase() || h.includes(col.toLowerCase()))
+        );
+        if (!hasAny) {
+          warnings.push(`Missing at least one of: ${group.join(', ')}`);
+        }
       }
     }
 
     if (missingRequired.length > 0) {
-      errors.push(`Missing required columns: ${missingRequired.join(', ')}`);
+      errors.push(`Missing required columns: ${[...new Set(missingRequired)].join(', ')}`);
     }
 
     // Check for duplicate headers

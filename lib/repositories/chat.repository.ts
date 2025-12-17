@@ -5,8 +5,8 @@
 
 import { Query } from 'node-appwrite';
 import { BaseRepository, type QueryOptions, type PaginatedResult } from './base.repository.js';
-import { COLLECTION_IDS, type ChatEntity } from '../types/entities.js';
-import type { ChatStatus } from '../types/chat.types.js';
+import { COLLECTION_IDS } from '../types/entities.js';
+import type { ChatEntity, ChatStatus } from '../types/chat.types.js';
 import type { Logger } from '../types/logger.js';
 
 /**

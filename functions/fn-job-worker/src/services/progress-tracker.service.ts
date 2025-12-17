@@ -51,7 +51,7 @@ export class ProgressTrackerService {
     // Update message with results
     await this.messageRepository.updateWithAnalysisResults(messageId, {
       content: result.content,
-      contentType: 'analysis',
+      contentType: 'summary',
       summaryData: JSON.stringify(result.summaryData),
       graphImageId: result.graphImageId || null,
       processingTime: result.processingTime,

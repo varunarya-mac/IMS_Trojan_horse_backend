@@ -6,7 +6,8 @@
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 import type { ChartConfiguration, ChartType } from 'chart.js';
 import { getStorage, BUCKET_IDS } from '@lib/utils/db.js';
-import { InputFile } from 'node-appwrite';
+import { InputFile } from 'node-appwrite/file';
+import { ID } from 'node-appwrite';
 import type { GraphConfig, GraphResult } from '../types.js';
 
 /**
@@ -39,14 +40,14 @@ export class GraphGeneratorService {
     const storage = getStorage();
     const fileName = `${fileNamePrefix}-${Date.now()}.png`;
 
-    const file = await storage.createFile(
-      BUCKET_IDS.REFRIGERATION_FILES,
-      'unique()',
-      InputFile.fromBuffer(imageBuffer, fileName)
-    );
+    const file = await storage.createFile({
+      bucketId: BUCKET_IDS.REFRIGERATION_FILES,
+      fileId: ID.unique(),
+      file: InputFile.fromBuffer(imageBuffer, fileName)
+  });
 
     // Build URL
-    const endpoint = process.env.APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
+    const endpoint = process.env.APPWRITE_ENDPOINT || 'https://fra.appwrite.io/v1';
     const projectId = process.env.APPWRITE_PROJECT_ID || '';
     const graphUrl = `${endpoint}/storage/buckets/${BUCKET_IDS.REFRIGERATION_FILES}/files/${file.$id}/view?project=${projectId}`;
 

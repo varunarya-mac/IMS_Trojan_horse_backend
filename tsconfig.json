@@ -16,13 +16,11 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@lib/*": ["./lib/*"],
-      "@api/*": ["./alarm-management-api/*"]
+      "@lib/*": ["./lib/dist/*"]
     }
   },
   "include": [
     "lib/**/*",
-    "alarm-management-api/**/*",
     "functions/**/*",
     "scripts/**/*"
   ],

@@ -34,7 +34,7 @@ export class JobOrchestratorService {
 
     try {
       // Stage 1: Validate CSV (10%)
-      await this.progressTracker.updateProgress(jobId, 'validating');
+      await this.progressTracker.updateProgress(jobId, 'validating_csv');
       await this.progressTracker.updatePlaceholderMessage(messageId, 'Validating your CSV file...');
 
       const validationResult = await this.functionInvoker.validateCSV(csvFileId);
@@ -46,7 +46,7 @@ export class JobOrchestratorService {
       this.logger.log(`CSV validation passed for job ${jobId}`);
 
       // Stage 2: Parse CSV (30%)
-      await this.progressTracker.updateProgress(jobId, 'parsing');
+      await this.progressTracker.updateProgress(jobId, 'parsing_csv');
       await this.progressTracker.updatePlaceholderMessage(messageId, 'Parsing refrigeration data...');
 
       const parseResult = await this.functionInvoker.processCSV(csvFileId, {
@@ -61,7 +61,7 @@ export class JobOrchestratorService {
       this.logger.log(`CSV parsing completed for job ${jobId}`);
 
       // Stage 3: Analyze Data (70%)
-      await this.progressTracker.updateProgress(jobId, 'analyzing');
+      await this.progressTracker.updateProgress(jobId, 'calling_ai');
       await this.progressTracker.updatePlaceholderMessage(messageId, 'Analyzing data with AI...');
 
       const analysisResult = await this.functionInvoker.analyzeData({
@@ -126,7 +126,7 @@ export class JobOrchestratorService {
       }
 
       // Stage 5: Complete (100%)
-      await this.progressTracker.updateProgress(jobId, 'completing');
+      await this.progressTracker.updateProgress(jobId, 'saving_results');
       await this.progressTracker.markCompleted(jobId, messageId, chatId, {
         content: analysisResult.data.content,
         summaryData: analysisResult.data.summaryData,

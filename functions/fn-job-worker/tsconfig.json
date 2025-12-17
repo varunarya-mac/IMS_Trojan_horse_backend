@@ -5,7 +5,7 @@
     "rootDir": "./src",
     "baseUrl": ".",
     "paths": {
-      "@lib/*": ["../../lib/*"]
+      "@lib/*": ["../../lib/dist/*"]
     }
   },
   "include": ["src/**/*"],

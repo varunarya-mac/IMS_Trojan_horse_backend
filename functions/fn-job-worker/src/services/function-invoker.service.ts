@@ -5,6 +5,7 @@
 
 import { getFunctions } from '@lib/utils/db.js';
 import type { FunctionInvocationResult } from '../types.js';
+import { ExecutionMethod } from 'node-appwrite';
 
 /**
  * Function IDs for invoking other functions
@@ -71,7 +72,7 @@ export class FunctionInvokerService {
         JSON.stringify(payload),
         false, // async = false (wait for response)
         '/', // path
-        'POST' // method
+        ExecutionMethod.POST // method
       );
 
       // Parse response
