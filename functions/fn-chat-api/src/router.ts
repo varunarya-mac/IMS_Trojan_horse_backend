@@ -8,7 +8,6 @@ import type { HttpMethod, RouteParams, RouteDefinition, RouteHandler, FunctionCo
 // Handler imports
 import { listChats, createChat, getChat, deleteChat } from './handlers/chats.js';
 import { sendMessage, listMessages } from './handlers/messages.js';
-import { getJobStatus } from './handlers/jobs.js';
 
 /**
  * Route definitions
@@ -24,9 +23,6 @@ const routes: RouteDefinition[] = [
   // Messages (must come after chats/:chatId routes)
   { method: 'POST', pattern: '/chats/:chatId/messages', handler: 'sendMessage', paramNames: ['chatId'] },
   { method: 'GET', pattern: '/chats/:chatId/messages', handler: 'listMessages', paramNames: ['chatId'] },
-
-  // Jobs
-  { method: 'GET', pattern: '/jobs/:jobId', handler: 'getJobStatus', paramNames: ['jobId'] },
 ];
 
 /**
@@ -39,7 +35,6 @@ const handlers: Record<string, RouteHandler> = {
   deleteChat,
   sendMessage,
   listMessages,
-  getJobStatus,
 };
 
 /**

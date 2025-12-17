@@ -1,28 +1,19 @@
 /**
- * Job Worker - Entry Point
+ * Job Worker - Cleanup Worker
  *
- * CRON-triggered Appwrite function for background job processing.
- * Polls pending jobs and orchestrates the analysis pipeline.
+ * CRON-triggered Appwrite function for maintenance and cleanup tasks.
+ * Runs periodically to clean up expired data and maintain system health.
  *
- * Pipeline:
- *   1. Validate CSV
- *   2. Parse CSV and extract metadata
- *   3. Run AI analysis
- *   4. Generate graph (if recommended)
- *   5. Update message with results
+ * Tasks:
+ *   1. Clean up expired chat context
+ *   2. Remove orphan files from storage
+ *   3. Archive old inactive chats
  */
 
-import type { FunctionContext, WorkerExecutionResult } from './types.js';
-import { JobRepository } from '@lib/repositories/job.repository.js';
-import { JobOrchestratorService } from './services/job-orchestrator.service.js';
-
-/**
- * Worker configuration
- */
-const CONFIG = {
-  BATCH_SIZE: parseInt(process.env.JOB_WORKER_BATCH_SIZE || '10', 10),
-  MAX_STALE_AGE_MINUTES: parseInt(process.env.JOB_MAX_STALE_AGE || '30', 10),
-};
+import type { FunctionContext, WorkerExecutionResult, TaskResult } from './types.js';
+import { cleanupExpiredContext } from './tasks/cleanup-context.js';
+import { cleanupOrphanFiles } from './tasks/cleanup-files.js';
+import { archiveOldChats } from './tasks/archive-chats.js';
 
 /**
  * Main function handler
@@ -31,7 +22,7 @@ export default async function (context: FunctionContext): Promise<unknown> {
   const { req, res, log, error: logError } = context;
   const startTime = Date.now();
 
-  log(`Job Worker started - ${new Date().toISOString()}`);
+  log(`Cleanup Worker started - ${new Date().toISOString()}`);
 
   // Handle OPTIONS for CORS (though this is mainly a CRON function)
   if (req.method === 'OPTIONS') {
@@ -43,72 +34,118 @@ export default async function (context: FunctionContext): Promise<unknown> {
   }
 
   const logger = { log, error: logError };
-  const result: WorkerExecutionResult = {
-    processedJobs: 0,
-    successfulJobs: 0,
-    failedJobs: 0,
-    jobs: [],
-    executionTime: 0,
-  };
+  const tasks: TaskResult[] = [];
+  let overallSuccess = true;
 
+  // Task 1: Clean up expired context
   try {
-    const jobRepository = new JobRepository(logger);
-    const orchestrator = new JobOrchestratorService(logger);
+    const taskStart = Date.now();
+    log('Running: Clean up expired context');
+    const contextResult = await cleanupExpiredContext(logger);
 
-    // Reset stale jobs first
-    const staleJobs = await jobRepository.findStaleProcessingJobs(CONFIG.MAX_STALE_AGE_MINUTES);
-    if (staleJobs.length > 0) {
-      log(`Found ${staleJobs.length} stale jobs, resetting...`);
-      for (const job of staleJobs) {
-        await jobRepository.markFailed(job.$id, 'Job timed out during processing');
-      }
-    }
-
-    // Fetch pending jobs
-    const pendingJobs = await jobRepository.findPendingJobs(CONFIG.BATCH_SIZE);
-    log(`Found ${pendingJobs.length} pending jobs`);
-
-    if (pendingJobs.length === 0) {
-      result.executionTime = Date.now() - startTime;
-      return res.json({
-        success: true,
-        message: 'No pending jobs to process',
-        ...result,
-      });
-    }
-
-    // Process jobs
-    const jobResults = await orchestrator.processJobs(pendingJobs);
-
-    // Compile results
-    result.processedJobs = jobResults.length;
-    result.successfulJobs = jobResults.filter(r => r.success).length;
-    result.failedJobs = jobResults.filter(r => !r.success).length;
-    result.jobs = jobResults;
-    result.executionTime = Date.now() - startTime;
-
-    log(`Job Worker completed: ${result.successfulJobs}/${result.processedJobs} jobs successful in ${result.executionTime}ms`);
-
-    return res.json({
-      success: true,
-      ...result,
+    tasks.push({
+      taskName: 'cleanup-context',
+      success: contextResult.errors.length === 0,
+      duration: Date.now() - taskStart,
+      details: {
+        deletedCount: contextResult.deletedCount,
+      },
+      errors: contextResult.errors.length > 0 ? contextResult.errors : undefined,
     });
+
+    if (contextResult.errors.length > 0) {
+      overallSuccess = false;
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logError(`Job Worker error: ${errorMessage}`);
-
-    result.executionTime = Date.now() - startTime;
-
-    return res.json(
-      {
-        success: false,
-        error: {
-          code: 'WORKER_ERROR',
-          message: errorMessage,
-        },
-        ...result,
-      },
-      500
-    );
+    logError(`Context cleanup task failed: ${errorMessage}`);
+    tasks.push({
+      taskName: 'cleanup-context',
+      success: false,
+      duration: 0,
+      details: {},
+      errors: [errorMessage],
+    });
+    overallSuccess = false;
   }
+
+  // Task 2: Clean up orphan files
+  try {
+    const taskStart = Date.now();
+    log('Running: Clean up orphan files');
+    const filesResult = await cleanupOrphanFiles(logger);
+
+    tasks.push({
+      taskName: 'cleanup-files',
+      success: filesResult.errors.length === 0,
+      duration: Date.now() - taskStart,
+      details: {
+        scannedCount: filesResult.scannedCount,
+        deletedCount: filesResult.deletedCount,
+      },
+      errors: filesResult.errors.length > 0 ? filesResult.errors : undefined,
+    });
+
+    if (filesResult.errors.length > 0) {
+      overallSuccess = false;
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logError(`File cleanup task failed: ${errorMessage}`);
+    tasks.push({
+      taskName: 'cleanup-files',
+      success: false,
+      duration: 0,
+      details: {},
+      errors: [errorMessage],
+    });
+    overallSuccess = false;
+  }
+
+  // Task 3: Archive old chats
+  try {
+    const taskStart = Date.now();
+    log('Running: Archive old chats');
+    const archiveResult = await archiveOldChats(logger);
+
+    tasks.push({
+      taskName: 'archive-chats',
+      success: archiveResult.errors.length === 0,
+      duration: Date.now() - taskStart,
+      details: {
+        archivedCount: archiveResult.archivedCount,
+        deletedMessages: archiveResult.deletedMessages,
+        deletedFiles: archiveResult.deletedFiles,
+      },
+      errors: archiveResult.errors.length > 0 ? archiveResult.errors : undefined,
+    });
+
+    if (archiveResult.errors.length > 0) {
+      overallSuccess = false;
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logError(`Chat archive task failed: ${errorMessage}`);
+    tasks.push({
+      taskName: 'archive-chats',
+      success: false,
+      duration: 0,
+      details: {},
+      errors: [errorMessage],
+    });
+    overallSuccess = false;
+  }
+
+  const totalDuration = Date.now() - startTime;
+  const result: WorkerExecutionResult = {
+    success: overallSuccess,
+    tasks,
+    totalDuration,
+    timestamp: new Date().toISOString(),
+  };
+
+  const successfulTasks = tasks.filter(t => t.success).length;
+  log(`Cleanup Worker completed: ${successfulTasks}/${tasks.length} tasks successful in ${totalDuration}ms`);
+
+  return res.json(result, overallSuccess ? 200 : 500);
 }

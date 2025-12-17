@@ -1,5 +1,5 @@
 /**
- * Types for fn-job-worker
+ * Types for fn-job-worker (Cleanup Worker)
  */
 
 /**
@@ -24,35 +24,22 @@ export interface FunctionContext {
 }
 
 /**
- * Job processing result
+ * Task execution result
  */
-export interface JobProcessingResult {
-  jobId: string;
+export interface TaskResult {
+  taskName: string;
   success: boolean;
-  error?: string;
-  processingTime: number;
+  duration: number;
+  details: Record<string, unknown>;
+  errors?: string[];
 }
 
 /**
  * Worker execution result
  */
 export interface WorkerExecutionResult {
-  processedJobs: number;
-  successfulJobs: number;
-  failedJobs: number;
-  jobs: JobProcessingResult[];
-  executionTime: number;
-}
-
-/**
- * Function invocation result
- */
-export interface FunctionInvocationResult<T = unknown> {
   success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
+  tasks: TaskResult[];
+  totalDuration: number;
+  timestamp: string;
 }

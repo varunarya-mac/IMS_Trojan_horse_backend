@@ -1,0 +1,137 @@
+{
+    "projectId": "6936b8d8003e749d06d2",
+    "endpoint": "https://fra.cloud.appwrite.io/v1",
+    "functions": [
+        {
+            "$id": "fn-alarm-management",
+            "name": "fn-alarm-management",
+            "runtime": "node-18.0",
+            "entrypoint": "dist/main.js",
+            "path": "functions/fn-alarm-management",
+            "execute": [
+                "any"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 60,
+            "enabled": true,
+            "logging": true
+        },
+        {
+            "$id": "fn-chat-api",
+            "name": "fn-chat-api",
+            "runtime": "node-18.0",
+            "entrypoint": "dist/main.js",
+            "path": "functions/fn-chat-api",
+            "execute": [
+                "any"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 120,
+            "enabled": true,
+            "logging": true,
+            "vars": [
+                {
+                    "key": "FN_CHAT_PROCESSOR_ID",
+                    "value": "fn-chat-processor"
+                },
+                {
+                    "key": "CONTEXT_MESSAGE_COUNT",
+                    "value": "3"
+                }
+            ]
+        },
+        {
+            "$id": "fn-chat-processor",
+            "name": "fn-chat-processor",
+            "runtime": "node-18.0",
+            "entrypoint": "dist/main.js",
+            "path": "functions/fn-chat-processor",
+            "execute": [
+                "any"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 300,
+            "enabled": true,
+            "logging": true,
+            "vars": [
+                {
+                    "key": "OPENAI_API_KEY",
+                    "value": "<YOUR_OPENAI_API_KEY>"
+                },
+                {
+                    "key": "OPENAI_MODEL",
+                    "value": "gpt-4o"
+                },
+                {
+                    "key": "OPENAI_GUARDRAIL_MODEL",
+                    "value": "gpt-4o-mini"
+                },
+                {
+                    "key": "FN_VECTOR_SEARCH_ID",
+                    "value": "fn-vector-search"
+                }
+            ]
+        },
+        {
+            "$id": "fn-vector-search",
+            "name": "fn-vector-search",
+            "runtime": "node-18.0",
+            "entrypoint": "dist/main.js",
+            "path": "functions/fn-vector-search",
+            "execute": [
+                "any"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 30,
+            "enabled": true,
+            "logging": true,
+            "vars": [
+                {
+                    "key": "OPENAI_API_KEY",
+                    "value": "<YOUR_OPENAI_API_KEY>"
+                },
+                {
+                    "key": "CHROMADB_API_KEY",
+                    "value": "<YOUR_CHROMADB_API_KEY>"
+                },
+                {
+                    "key": "CHROMADB_TENANT",
+                    "value": "<YOUR_CHROMADB_TENANT>"
+                },
+                {
+                    "key": "CHROMADB_DATABASE",
+                    "value": "IMS_Alarm_management"
+                }
+            ]
+        },
+        {
+            "$id": "fn-job-worker",
+            "name": "fn-job-worker",
+            "runtime": "node-18.0",
+            "entrypoint": "dist/main.js",
+            "path": "functions/fn-job-worker",
+            "execute": [
+                "any"
+            ],
+            "events": [],
+            "schedule": "*/15 * * * *",
+            "timeout": 120,
+            "enabled": true,
+            "logging": true,
+            "vars": [
+                {
+                    "key": "CHAT_ARCHIVE_AGE_DAYS",
+                    "value": "30"
+                },
+                {
+                    "key": "CONTEXT_EXPIRY_HOURS",
+                    "value": "24"
+                }
+            ]
+        }
+    ]
+}

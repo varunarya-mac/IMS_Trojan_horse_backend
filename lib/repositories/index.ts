@@ -13,4 +13,4 @@ export { ClassRepository, FieldRepository } from './class.repository.js';
 // IoT Refrigeration Chat
 export { ChatRepository } from './chat.repository.js';
 export { MessageRepository } from './message.repository.js';
-export { JobRepository } from './job.repository.js';
+export { ChatContextRepository } from './context.repository.js';

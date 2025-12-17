@@ -96,7 +96,7 @@ export const COLLECTION_IDS = {
   // IoT Refrigeration Chat collections
   CHATS: 'chats',
   MESSAGES: 'messages',
-  PROCESSING_JOBS: 'processing_jobs',
+  CHAT_CONTEXT: 'chatContext',
 } as const;
 
 export type CollectionId = typeof COLLECTION_IDS[keyof typeof COLLECTION_IDS];

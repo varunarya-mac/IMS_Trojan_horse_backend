@@ -165,6 +165,6 @@ export interface DeleteChatResponse {
     messages: number;
     csvFile: boolean;
     graphFiles: number;
-    jobs: number;
+    context: boolean;
   };
 }

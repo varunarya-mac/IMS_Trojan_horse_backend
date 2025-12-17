@@ -12,9 +12,10 @@ export * from './types/program-modules.js';
 // Types - IoT Refrigeration Chat
 export * from './types/chat.types.js';
 export * from './types/message.types.js';
-export * from './types/job.types.js';
 export * from './types/csv.types.js';
 export * from './types/analysis.types.js';
+export * from './types/context.types.js';
+export * from './types/rag.types.js';
 
 // Constants
 export * from './constants/index.js';

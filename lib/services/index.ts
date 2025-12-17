@@ -16,4 +16,3 @@ export {
 // IoT Refrigeration Chat Services
 export { ChatService } from './chat.service.js';
 export { GuardrailService } from './guardrail.service.js';
-export { JobService } from './job.service.js';

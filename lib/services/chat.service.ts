@@ -5,7 +5,7 @@
 
 import { ChatRepository } from '../repositories/chat.repository.js';
 import { MessageRepository } from '../repositories/message.repository.js';
-import { JobRepository } from '../repositories/job.repository.js';
+import { ChatContextRepository } from '../repositories/context.repository.js';
 import { getStorage, BUCKET_IDS } from '../utils/db.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import type {
@@ -28,14 +28,14 @@ import { createNoOpLogger } from '../types/logger.js';
 export class ChatService {
   private readonly chatRepository: ChatRepository;
   private readonly messageRepository: MessageRepository;
-  private readonly jobRepository: JobRepository;
+  private readonly contextRepository: ChatContextRepository;
   private readonly logger: Logger;
 
   constructor(logger?: Logger) {
     this.logger = logger || createNoOpLogger();
     this.chatRepository = new ChatRepository(this.logger);
     this.messageRepository = new MessageRepository(this.logger);
-    this.jobRepository = new JobRepository(this.logger);
+    this.contextRepository = new ChatContextRepository(this.logger);
   }
 
   /**
@@ -133,7 +133,7 @@ export class ChatService {
       messages: 0,
       csvFile: false,
       graphFiles: 0,
-      jobs: 0,
+      context: false,
     };
 
     // Delete graph images from storage
@@ -164,8 +164,8 @@ export class ChatService {
     // Delete all messages
     deletedResources.messages = await this.messageRepository.deleteAllByChatId(chatId);
 
-    // Delete all jobs
-    deletedResources.jobs = await this.jobRepository.deleteAllByChatId(chatId);
+    // Delete chat context
+    deletedResources.context = await this.contextRepository.deleteByChatId(chatId);
 
     // Delete the chat
     await this.chatRepository.delete(chatId);

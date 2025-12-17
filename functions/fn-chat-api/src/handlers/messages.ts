@@ -1,20 +1,21 @@
 /**
  * Messages Handler
- * Handles message operations including sending messages and file uploads
+ * Handles message operations with synchronous processing via fn-chat-processor
  */
 
 import { z } from 'zod';
 import type { FunctionContext, RouteParams } from '../types.js';
 import { getAuthenticatedUserId } from '../types.js';
 import { sendSuccess, sendError, sendHandledError, parseBody } from '../utils/response.js';
-import { checkQuestionGuardrail, needsSemanticCheck } from '../middleware/guardrails.js';
+import { checkQuestionGuardrail } from '../middleware/guardrails.js';
 import { ChatService } from '@lib/services/chat.service.js';
-import { JobService } from '@lib/services/job.service.js';
 import { MessageRepository } from '@lib/repositories/message.repository.js';
 import { ChatRepository } from '@lib/repositories/chat.repository.js';
 import { ValidationError, NotFoundError, ForbiddenError } from '@lib/utils/errors.js';
-import type { MessageDTO, MessageRole, MessageContentType } from '@lib/types/message.types.js';
+import type { MessageDTO, MessageRole, MessageContentType, SummaryData, Summary, Recommendation, Datapoint } from '@lib/types/message.types.js';
 import type { MessageEntity } from '@lib/types/message.types.js';
+import { ProcessorInvokerService } from '../services/processor-invoker.js';
+import { ContextService } from '../services/context.service.js';
 
 // Request schemas
 const SendMessageSchema = z.object({
@@ -31,7 +32,7 @@ const ListMessagesQuerySchema = z.object({
 
 /**
  * POST /chats/:chatId/messages
- * Send a message in a chat session
+ * Send a message in a chat session - processes synchronously
  */
 export async function sendMessage(
   context: FunctionContext,
@@ -75,12 +76,6 @@ export async function sendMessage(
     const guardrailResult = checkQuestionGuardrail(content);
     log(`Guardrail passed. Matched keywords: ${guardrailResult.matchedKeywords?.join(', ') || 'none'}`);
 
-    // Check if semantic analysis is needed
-    const requiresSemanticCheck = needsSemanticCheck(content);
-    if (requiresSemanticCheck) {
-      log('Question requires Layer 2 semantic check');
-    }
-
     // Create user message
     const messageRepository = new MessageRepository({ log, error: logError });
     const userMessage = await messageRepository.createUserMessage(chatId, content);
@@ -97,52 +92,18 @@ export async function sendMessage(
       log(`Updated chat with CSV info: ${csvFileId}`);
     }
 
-    // Determine if we need background processing
-    const hasCSV = csvFileId || chat.csvFileId;
+    // Get context for processing
+    const contextService = new ContextService({ log, error: logError });
+    const processingContext = await contextService.getContextForProcessing(
+      chatId,
+      csvFileId || chat.csvFileId || undefined
+    );
 
-    if (hasCSV) {
-      // Create placeholder assistant message
-      const assistantMessage = await messageRepository.createAssistantPlaceholder(
-        chatId,
-        'Analyzing your refrigeration data...'
-      );
-      log(`Created assistant placeholder: ${assistantMessage.$id}`);
+    // Check if we have CSV context
+    const hasCSVContext = processingContext.csvData !== null;
 
-      // Update chat status to processing
-      await chatRepository.updateStatus(chatId, 'processing');
-
-      // Create processing job
-      const jobService = new JobService({ log, error: logError });
-      const job = await jobService.createJob({
-        chatId,
-        messageId: assistantMessage.$id,
-        userId,
-        jobType: 'csv_analysis',
-        userQuestion: content,
-        csvFileId: csvFileId || chat.csvFileId!,
-      });
-      log(`Created processing job: ${job.$id}`);
-
-      // Return response with job info
-      return sendSuccess(
-        res,
-        {
-          userMessage: toMessageDTO(userMessage),
-          assistantMessage: toMessageDTO(assistantMessage),
-          job: {
-            jobId: job.$id,
-            status: job.status,
-            progress: job.progress,
-            progressMessage: job.progressMessage,
-          },
-          processing: true,
-          estimatedTime: jobService.estimateProcessingTime(csvFileSize || chat.csvFileSize),
-        },
-        202
-      );
-    } else {
-      // No CSV context - simple text response
-      // For now, create a placeholder that will be processed immediately
+    if (!hasCSVContext) {
+      // No CSV context - provide helpful response
       const assistantMessage = await messageRepository.createAssistantPlaceholder(
         chatId,
         'I can help you analyze refrigeration data. Please upload a CSV file with your telemetry data, and I\'ll provide insights on temperature patterns, alarms, and recommendations.'
@@ -153,7 +114,115 @@ export async function sendMessage(
         {
           userMessage: toMessageDTO(userMessage),
           assistantMessage: toMessageDTO(assistantMessage),
-          processing: false,
+        },
+        201
+      );
+    }
+
+    // Update chat status to processing
+    await chatRepository.updateStatus(chatId, 'processing');
+
+    // Create placeholder assistant message
+    const assistantMessage = await messageRepository.createAssistantPlaceholder(
+      chatId,
+      'Analyzing your refrigeration data...'
+    );
+    log(`Created assistant placeholder: ${assistantMessage.$id}`);
+
+    try {
+      // Invoke processor synchronously
+      log('Invoking chat processor...');
+      const processor = new ProcessorInvokerService();
+      const result = await processor.processMessage({
+        chatId,
+        messageId: assistantMessage.$id,
+        userQuestion: content,
+        csvData: processingContext.csvData!,
+        messageContext: processingContext.messageContext,
+      });
+      log(`Processor completed in ${result.processingTimeMs}ms`);
+
+      // Build summary data with proper types
+      const summary: Summary = {
+        title: 'Analysis Results',
+        description: result.content.substring(0, 500),
+        recommendedActions: result.recommendations?.map(r => r.title) || [],
+      };
+
+      const recommendations: Recommendation[] = (result.recommendations || []).map(r => ({
+        title: r.title,
+        description: r.description,
+        confidence: r.priority === 'high' ? 90 : r.priority === 'medium' ? 70 : 50,
+        recommendedActions: [r.description],
+        evidenceTrail: [],
+      }));
+
+      const datapoints: Datapoint[] = (result.dataPoints || []).map(dp => ({
+        name: dp.label,
+        metric: `${dp.value}${dp.unit ? ` ${dp.unit}` : ''}`,
+        status: 'Okay' as const,
+        history: null,
+      }));
+
+      const summaryData: SummaryData = {
+        summary,
+        recommendations,
+        datapoints,
+        graphRecommendation: null,
+      };
+
+      // Determine content type (only 'summary' or 'graph' with optional graph)
+      const contentType: MessageContentType = result.graph ? 'graph' : 'summary';
+
+      // Update assistant message with result
+      await messageRepository.updateWithAnalysisResults(assistantMessage.$id, {
+        content: result.content,
+        contentType,
+        summaryData: JSON.stringify(summaryData),
+        graphImageId: result.graph?.graphImageId || null,
+        datapointsData: datapoints.length > 0 ? JSON.stringify(datapoints) : null,
+        processingTime: result.processingTimeMs,
+      });
+
+      // Update chat status to completed
+      await chatRepository.updateStatus(chatId, 'completed');
+
+      // Get updated assistant message
+      const updatedAssistantMessage = await messageRepository.findById(assistantMessage.$id);
+
+      return sendSuccess(
+        res,
+        {
+          userMessage: toMessageDTO(userMessage),
+          assistantMessage: toMessageDTO(updatedAssistantMessage!),
+          processingTimeMs: result.processingTimeMs,
+        },
+        201
+      );
+    } catch (processingError) {
+      logError(`Processing failed: ${processingError instanceof Error ? processingError.message : String(processingError)}`);
+
+      // Update message with error
+      await messageRepository.updateWithError(
+        assistantMessage.$id,
+        'I encountered an error while analyzing your data. Please try again or contact support if the issue persists.'
+      );
+
+      // Update chat status to error
+      await chatRepository.updateStatus(chatId, 'error');
+
+      // Get updated assistant message
+      const updatedAssistantMessage = await messageRepository.findById(assistantMessage.$id);
+
+      return sendSuccess(
+        res,
+        {
+          userMessage: toMessageDTO(userMessage),
+          assistantMessage: toMessageDTO(updatedAssistantMessage!),
+          error: {
+            code: 'PROCESSING_ERROR',
+            message: processingError instanceof Error ? processingError.message : 'Processing failed',
+          },
         },
         201
       );
@@ -221,6 +290,15 @@ export async function listMessages(
  * Convert MessageEntity to MessageDTO
  */
 function toMessageDTO(message: MessageEntity): MessageDTO {
+  const endpoint = process.env.APPWRITE_ENDPOINT || 'https://fra.cloud.appwrite.io/v1';
+  const projectId = process.env.APPWRITE_PROJECT_ID || '';
+  const bucketId = process.env.REFRIGERATION_BUCKET_ID || 'refrigeration-files';
+
+  let graphImageUrl = null;
+  if (message.graphImageId) {
+    graphImageUrl = `${endpoint}/storage/buckets/${bucketId}/files/${message.graphImageId}/view?project=${projectId}`;
+  }
+
   return {
     id: message.$id,
     chatId: message.chatId,
@@ -229,10 +307,10 @@ function toMessageDTO(message: MessageEntity): MessageDTO {
     contentType: message.contentType as MessageContentType,
     summaryData: message.summaryData ? JSON.parse(message.summaryData) : null,
     graphImageId: message.graphImageId,
+    graphImageUrl,
     datapointsData: message.datapointsData ? JSON.parse(message.datapointsData) : null,
     processingTime: message.processingTime,
     tokenUsage: message.tokenUsage ? JSON.parse(message.tokenUsage) : null,
     createdAt: message.$createdAt,
-    graphImageUrl: null
   };
 }

@@ -134,6 +134,20 @@ export class ChatRepository extends BaseRepository<ChatEntity> {
     }
     return chat;
   }
+
+  /**
+   * Find old chats (updated before the given ISO date)
+   * Used for archiving/cleanup
+   */
+  async findOldChats(beforeIsoDate: string, limit: number = 100): Promise<ChatEntity[]> {
+    const result = await this.findAll({
+      filters: [Query.lessThan('$updatedAt', beforeIsoDate)],
+      orderBy: '$updatedAt',
+      orderDirection: 'asc',
+      limit,
+    });
+    return result.documents;
+  }
 }
 
 export default ChatRepository;
