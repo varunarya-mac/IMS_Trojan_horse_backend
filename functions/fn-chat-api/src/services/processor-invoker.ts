@@ -1,6 +1,7 @@
 /**
  * Processor Invoker Service
- * Synchronously invokes fn-chat-processor for message processing
+ * Asynchronously invokes fn-chat-processor for message processing
+ * Uses async execution to avoid timeout issues on Appwrite free tier
  */
 
 import { Client, Functions, ExecutionMethod } from 'node-appwrite';
@@ -41,7 +42,7 @@ export interface ProcessMessageRequest {
 }
 
 /**
- * Process message result
+ * Process message result (returned when sync)
  */
 export interface ProcessMessageResult {
   content: string;
@@ -63,6 +64,14 @@ export interface ProcessMessageResult {
   };
   ragContext?: string[];
   processingTimeMs: number;
+}
+
+/**
+ * Async processing result (returned immediately)
+ */
+export interface AsyncProcessingResult {
+  executionId: string;
+  status: 'processing';
 }
 
 /**
@@ -89,9 +98,10 @@ export class ProcessorInvokerService {
   }
 
   /**
-   * Invoke processor to handle message
+   * Start async processing of a message
+   * Returns immediately with execution ID - processor will update DB when done
    */
-  async processMessage(request: ProcessMessageRequest): Promise<ProcessMessageResult> {
+  async startProcessingAsync(request: ProcessMessageRequest): Promise<AsyncProcessingResult> {
     // Build payload
     const payload = {
       action: 'process_message',
@@ -103,48 +113,32 @@ export class ProcessorInvokerService {
     };
 
     // Debug logging
+    console.log('[ProcessorInvoker] Starting ASYNC processing');
     console.log('[ProcessorInvoker] Function ID:', this.functionId);
-    console.log('[ProcessorInvoker] Request payload:', JSON.stringify({
-      ...payload,
-      csvData: payload.csvData ? {
-        headers: payload.csvData.headers,
-        rowCount: payload.csvData.rows?.length,
-        totalRows: payload.csvData.totalRows,
-      } : undefined,
-    }, null, 2));
+    console.log('[ProcessorInvoker] Chat ID:', request.chatId);
+    console.log('[ProcessorInvoker] Message ID:', request.messageId);
+    console.log('[ProcessorInvoker] Has CSV data:', !!request.csvData);
 
     const payloadString = JSON.stringify(payload);
-    console.log('[ProcessorInvoker] Payload string length:', payloadString.length);
-    console.log('[ProcessorInvoker] Payload string (first 500 chars):', payloadString.substring(0, 500));
+    console.log('[ProcessorInvoker] Payload size:', payloadString.length, 'bytes');
 
+    // Fire async execution - returns immediately
     const execution = await this.functions.createExecution(
       this.functionId,
       payloadString,
-      false, // async = false (synchronous)
+      true, // async = TRUE (fire and forget)
       '/',
       ExecutionMethod.POST,
       { 'Content-Type': 'application/json' }
     );
 
-    // Debug logging for response
-    console.log('[ProcessorInvoker] Execution status:', execution.status);
-    console.log('[ProcessorInvoker] Execution errors:', execution.errors);
-    console.log('[ProcessorInvoker] Response body (first 500 chars):', execution.responseBody?.substring(0, 500));
+    console.log('[ProcessorInvoker] Async execution started:', execution.$id);
+    console.log('[ProcessorInvoker] Initial status:', execution.status);
 
-    // Check execution status
-    if (execution.status !== 'completed') {
-      throw new Error(`Processor execution failed: ${execution.errors || 'Unknown error'}`);
-    }
-
-    // Parse response
-    const response = JSON.parse(execution.responseBody);
-
-    if (!response.success) {
-      console.log('[ProcessorInvoker] Error response:', JSON.stringify(response.error, null, 2));
-      throw new Error(response.error?.message || 'Processing failed');
-    }
-
-    return response.data as ProcessMessageResult;
+    return {
+      executionId: execution.$id,
+      status: 'processing',
+    };
   }
 
   /**

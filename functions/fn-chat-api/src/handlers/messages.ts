@@ -1,6 +1,8 @@
 /**
  * Messages Handler
- * Handles message operations with synchronous processing via fn-chat-processor
+ * Handles message operations with async processing via fn-chat-processor
+ * Uses async execution to avoid 15s timeout on Appwrite free tier
+ * Frontend should subscribe to Realtime updates for message completion
  */
 
 import { z } from 'zod';
@@ -12,7 +14,7 @@ import { ChatService } from '@lib/services/chat.service.js';
 import { MessageRepository } from '@lib/repositories/message.repository.js';
 import { ChatRepository } from '@lib/repositories/chat.repository.js';
 import { ValidationError, NotFoundError, ForbiddenError } from '@lib/utils/errors.js';
-import type { MessageDTO, MessageRole, MessageContentType, SummaryData, Summary, Recommendation, Datapoint } from '@lib/types/message.types.js';
+import type { MessageDTO, MessageRole, MessageContentType } from '@lib/types/message.types.js';
 import type { MessageEntity } from '@lib/types/message.types.js';
 import { ProcessorInvokerService } from '../services/processor-invoker.js';
 import { ContextService } from '../services/context.service.js';
@@ -32,7 +34,9 @@ const ListMessagesQuerySchema = z.object({
 
 /**
  * POST /chats/:chatId/messages
- * Send a message in a chat session - processes synchronously
+ * Send a message in a chat session - processes asynchronously
+ * Returns immediately with placeholder, processor updates DB when done
+ * Frontend should subscribe to Realtime for message updates
  */
 export async function sendMessage(
   context: FunctionContext,
@@ -80,7 +84,7 @@ export async function sendMessage(
     const messageRepository = new MessageRepository({ log, error: logError });
     const userMessage = await messageRepository.createUserMessage(chatId, content);
     log(`Created user message: ${userMessage.$id}`);
-
+   log(`=========CSV info: ${csvFileId}`);
     // Handle CSV file if provided
     if (csvFileId) {
       const chatService = new ChatService({ log, error: logError });
@@ -98,7 +102,7 @@ export async function sendMessage(
       chatId,
       csvFileId || chat.csvFileId || undefined
     );
-
+log(`========processingContext==: ${processingContext.csvData}`);
     // Check if we have CSV context
     const hasCSVContext = processingContext.csvData !== null;
 
@@ -119,104 +123,41 @@ export async function sendMessage(
     );
     log(`Created assistant placeholder: ${assistantMessage.$id}`);
 
+    // Start async processing (fire and forget)
+    // Processor will update the message in DB when done
+    // Frontend should subscribe to Realtime updates for this message
     try {
-      // Invoke processor synchronously (with or without CSV)
-      log(`Invoking chat processor... (hasCSV: ${hasCSVContext})`);
+      log(`Starting ASYNC chat processor... (hasCSV: ${hasCSVContext})`);
       const processor = new ProcessorInvokerService();
-      const result = await processor.processMessage({
+      const asyncResult = await processor.startProcessingAsync({
         chatId,
         messageId: assistantMessage.$id,
         userQuestion: content,
         csvData: processingContext.csvData || undefined,
         messageContext: processingContext.messageContext,
       });
-      log(`Processor completed in ${result.processingTimeMs}ms`);
-
-      // Build summary data with proper types
-      const summary: Summary = {
-        title: 'Analysis Results',
-        description: result.content.substring(0, 500),
-        recommendedActions: result.recommendations?.map(r => r.title) || [],
-      };
-
-      const recommendations: Recommendation[] = (result.recommendations || []).map(r => ({
-        title: r.title,
-        description: r.description,
-        confidence: r.priority === 'high' ? 90 : r.priority === 'medium' ? 70 : 50,
-        recommendedActions: [r.description],
-        evidenceTrail: [],
-      }));
-
-      const datapoints: Datapoint[] = (result.dataPoints || []).map(dp => ({
-        name: dp.label,
-        metric: `${dp.value}${dp.unit ? ` ${dp.unit}` : ''}`,
-        status: 'Okay' as const,
-        history: null,
-      }));
-
-      const summaryData: SummaryData = {
-        summary,
-        recommendations,
-        datapoints,
-        graphRecommendation: null,
-      };
-
-      // Determine content type (only 'summary' or 'graph' with optional graph)
-      const contentType: MessageContentType = result.graph ? 'graph' : 'summary';
-
-      // Update assistant message with result
-      await messageRepository.updateWithAnalysisResults(assistantMessage.$id, {
-        content: result.content,
-        contentType,
-        summaryData: JSON.stringify(summaryData),
-        graphImageId: result.graph?.graphImageId || null,
-        datapointsData: datapoints.length > 0 ? JSON.stringify(datapoints) : null,
-        processingTime: result.processingTimeMs,
-      });
-
-      // Update chat status to completed
-      await chatRepository.updateStatus(chatId, 'completed');
-
-      // Get updated assistant message
-      const updatedAssistantMessage = await messageRepository.findById(assistantMessage.$id);
-
-      return sendSuccess(
-        res,
-        {
-          userMessage: toMessageDTO(userMessage),
-          assistantMessage: toMessageDTO(updatedAssistantMessage!),
-          processingTimeMs: result.processingTimeMs,
-        },
-        201
-      );
-    } catch (processingError) {
-      logError(`Processing failed: ${processingError instanceof Error ? processingError.message : String(processingError)}`);
-
-      // Update message with error
+      log(`Async processing started: executionId=${asyncResult.executionId}`);
+    } catch (startError) {
+      // If we can't even start the processor, update message with error
+      logError(`Failed to start processor: ${startError instanceof Error ? startError.message : String(startError)}`);
       await messageRepository.updateWithError(
         assistantMessage.$id,
-        'I encountered an error while analyzing your data. Please try again or contact support if the issue persists.'
+        'Failed to start processing. Please try again.'
       );
-
-      // Update chat status to error
       await chatRepository.updateStatus(chatId, 'error');
-
-      // Get updated assistant message
-      const updatedAssistantMessage = await messageRepository.findById(assistantMessage.$id);
-
-      return sendSuccess(
-        res,
-        {
-          userMessage: toMessageDTO(userMessage),
-          assistantMessage: toMessageDTO(updatedAssistantMessage!),
-          error: {
-            code: 'PROCESSING_ERROR',
-            message: processingError instanceof Error ? processingError.message : 'Processing failed',
-          },
-        },
-        201
-      );
     }
+
+    // Return immediately with placeholder (HTTP 202 Accepted)
+    // Frontend will receive updates via Realtime subscription
+    return sendSuccess(
+      res,
+      {
+        userMessage: toMessageDTO(userMessage),
+        assistantMessage: toMessageDTO(assistantMessage),
+        status: 'processing',
+      },
+      202 // Accepted - processing started
+    );
   } catch (error) {
     return sendHandledError(res, error);
   }

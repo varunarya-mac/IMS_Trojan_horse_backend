@@ -2,7 +2,8 @@
  * Chat Processor - Entry Point
  *
  * Appwrite function for processing chat messages with RAG and AI analysis.
- * Called synchronously by fn-chat-api.
+ * Called ASYNCHRONOUSLY by fn-chat-api to avoid timeout issues.
+ * Updates message directly in DB when processing completes.
  *
  * Actions:
  *   process_message - Process user message with CSV data and generate response
@@ -26,6 +27,11 @@ import { RAGService } from './services/rag.service.js';
 import { GuardrailService } from './services/guardrail.service.js';
 import { GraphGeneratorService } from './services/graph-generator.service.js';
 import { REFRIGERATION_ANALYSIS_PROMPT, buildAnalysisPrompt } from './prompts/system.prompt.js';
+
+// Import repositories for direct DB updates (async architecture)
+import { MessageRepository } from '@lib/repositories/message.repository.js';
+import { ChatRepository } from '@lib/repositories/chat.repository.js';
+import type { MessageContentType } from '@lib/types/message.types.js';
 
 /**
  * Get environment configuration
@@ -144,12 +150,33 @@ async function handleProcessMessage(
 
   if (!semanticCheck.allowed) {
     log(`Question blocked by guardrail: ${semanticCheck.reason}`);
+
+    const blockedContent = semanticCheck.suggestion ||
+      "I can only help with questions about refrigeration systems, temperature monitoring, and cold chain management. Please ask a question related to these topics.";
+
+    // Save guardrail response to DB (async architecture)
+    if (request.messageId && request.chatId) {
+      try {
+        const messageRepo = new MessageRepository({ log, error: logError });
+        const chatRepo = new ChatRepository({ log, error: logError });
+
+        await messageRepo.updateWithAnalysisResults(request.messageId, {
+          content: blockedContent,
+          contentType: 'text' as MessageContentType,
+          processingTime: Date.now() - startTime,
+        });
+        await chatRepo.updateStatus(request.chatId, 'completed');
+        log(`[DB] Updated message ${request.messageId} with guardrail response`);
+      } catch (dbError) {
+        logError(`[DB] Failed to update message: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+      }
+    }
+
     return {
       success: true,
       action: 'process_message',
       data: {
-        content: semanticCheck.suggestion ||
-          "I can only help with questions about refrigeration systems, temperature monitoring, and cold chain management. Please ask a question related to these topics.",
+        content: blockedContent,
         recommendations: [],
         dataPoints: [],
         processingTimeMs: Date.now() - startTime,
@@ -209,9 +236,18 @@ async function handleProcessMessage(
   // Prepare CSV summary
   let csvSummary = 'No CSV data provided.';
   if (csvData && csvData.rows.length > 0) {
+    log(`[CSV] Received CSV data: ${csvData.rows.length} rows, ${csvData.headers.length} columns`);
+    log(`[CSV] CSV headers: ${csvData.headers.join(', ')}`);
+    if (csvData.fileInfo) {
+      log(`[CSV] File info: id=${csvData.fileInfo.fileId}, name=${csvData.fileInfo.fileName}, size=${csvData.fileInfo.fileSize}`);
+    }
+    log(`[CSV] Total rows in original file: ${csvData.totalRows}, sample size: ${csvData.sampleSize || csvData.rows.length}`);
+
     const stats = csvProcessor.calculateColumnStats(csvData.headers, csvData.rows);
     csvSummary = csvProcessor.createSummaryForAI(csvData.headers, csvData.rows, stats);
-    log(`CSV summary created: ${csvData.rows.length} rows, ${csvData.headers.length} columns`);
+    log(`[CSV] CSV summary created for AI analysis`);
+  } else {
+    log(`[CSV] No CSV data provided in request`);
   }
 
   // Build analysis prompt
@@ -242,11 +278,11 @@ async function handleProcessMessage(
   // Check if graph should be generated
   let graphResult = undefined;
   if (csvData && csvData.rows.length > 0) {
-    log('Checking if graph should be generated...');
+    log(`[CSV] Checking if graph should be generated from CSV data...`);
     const graphRecommendation = await openai.getGraphRecommendation(csvSummary, sanitizedQuestion);
 
     if (graphRecommendation) {
-      log(`Generating ${graphRecommendation.type} graph: ${graphRecommendation.title}`);
+      log(`[CSV] Generating ${graphRecommendation.type} graph: ${graphRecommendation.title}`);
 
       try {
         const graphGenerator = new GraphGeneratorService({
@@ -270,12 +306,12 @@ async function handleProcessMessage(
             graphConfig,
             `graph-${request.chatId || 'unknown'}`
           );
-          log(`Graph generated: ${graphResult.graphImageId}`);
+          log(`[CSV] Graph generated successfully: ${graphResult.graphImageId}`);
         } else {
-          logError(`Graph config invalid: ${configValidation.errors.join(', ')}`);
+          logError(`[CSV] Graph config invalid: ${configValidation.errors.join(', ')}`);
         }
       } catch (graphError) {
-        logError(`Graph generation failed: ${graphError instanceof Error ? graphError.message : String(graphError)}`);
+        logError(`[CSV] Graph generation failed: ${graphError instanceof Error ? graphError.message : String(graphError)}`);
       }
     }
   }
@@ -299,6 +335,67 @@ async function handleProcessMessage(
     ragContext: ragContext.length > 0 ? ragContext : undefined,
     processingTimeMs,
   };
+
+  // Save results to DB (async architecture)
+  if (request.messageId && request.chatId) {
+    try {
+      const messageRepo = new MessageRepository({ log, error: logError });
+      const chatRepo = new ChatRepository({ log, error: logError });
+
+      // Build summary data
+      const summaryData = {
+        summary: {
+          title: 'Analysis Results',
+          description: result.content.substring(0, 500),
+          recommendedActions: result.recommendations?.map(r => r.title) || [],
+        },
+        recommendations: (result.recommendations || []).map(r => ({
+          title: r.title,
+          description: r.description,
+          confidence: r.priority === 'high' ? 90 : r.priority === 'medium' ? 70 : 50,
+          recommendedActions: [r.description],
+          evidenceTrail: [],
+        })),
+        datapoints: (result.dataPoints || []).map(dp => ({
+          name: dp.label,
+          metric: `${dp.value}${dp.unit ? ` ${dp.unit}` : ''}`,
+          status: 'Okay',
+          history: null,
+        })),
+        graphRecommendation: null,
+      };
+
+      // Determine content type
+      const contentType: MessageContentType = result.graph ? 'graph' : 'summary';
+
+      // Update message with results
+      await messageRepo.updateWithAnalysisResults(request.messageId, {
+        content: result.content,
+        contentType,
+        summaryData: JSON.stringify(summaryData),
+        graphImageId: result.graph?.graphImageId || null,
+        datapointsData: summaryData.datapoints.length > 0 ? JSON.stringify(summaryData.datapoints) : null,
+        processingTime: processingTimeMs,
+      });
+
+      // Update chat status
+      await chatRepo.updateStatus(request.chatId, 'completed');
+
+      log(`[DB] Updated message ${request.messageId} with AI response`);
+    } catch (dbError) {
+      logError(`[DB] Failed to update message: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+
+      // Try to mark as error
+      try {
+        const messageRepo = new MessageRepository({ log, error: logError });
+        const chatRepo = new ChatRepository({ log, error: logError });
+        await messageRepo.updateWithError(request.messageId, 'Failed to save analysis results.');
+        await chatRepo.updateStatus(request.chatId, 'error');
+      } catch {
+        logError('[DB] Failed to update error status');
+      }
+    }
+  }
 
   return {
     success: true,

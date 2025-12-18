@@ -1,13 +1,77 @@
 /**
  * Graph Generator Service
- * Generates chart images using Chart.js
+ * Generates chart SVG images using pure JavaScript (no native dependencies)
  */
 
-import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
-import type { ChartConfiguration, ChartType } from 'chart.js';
 import { Client, Storage, ID } from 'node-appwrite';
 import { InputFile } from 'node-appwrite/file';
+import { SvgCanvas, Rect2D, SvgCanvas2DGradient } from 'red-agate-svg-canvas';
+import { Chart, registerables } from 'chart.js';
 import type { GraphConfig, GraphResult } from '../types.js';
+
+// Register all Chart.js components
+Chart.register(...registerables);
+
+// Set CanvasGradient in global scope for Chart.js compatibility
+(globalThis as any).CanvasGradient = SvgCanvas2DGradient;
+
+/**
+ * Chart.js configuration type
+ */
+interface ChartConfiguration {
+  type: string;
+  data: {
+    labels: string[];
+    datasets: Array<{
+      label: string;
+      data: number[];
+      borderColor: string;
+      backgroundColor: string;
+      fill: boolean;
+      tension: number;
+      pointRadius: number;
+    }>;
+  };
+  options: {
+    responsive: boolean;
+    maintainAspectRatio: boolean;
+    animation: boolean;
+    devicePixelRatio: number;
+    plugins: {
+      title: {
+        display: boolean;
+        text: string;
+        font: {
+          size: number;
+          weight: string;
+        };
+      };
+      legend: {
+        display: boolean;
+        position: string;
+      };
+    };
+    scales: {
+      x: {
+        title: {
+          display: boolean;
+          text: string;
+        };
+        ticks: {
+          maxTicksLimit: number;
+          maxRotation: number;
+        };
+      };
+      y: {
+        title: {
+          display: boolean;
+          text: string;
+        };
+        beginAtZero: boolean;
+      };
+    };
+  };
+}
 
 /**
  * Graph Generator Configuration
@@ -23,11 +87,11 @@ export interface GraphGeneratorConfig {
 
 /**
  * Graph Generator Service
+ * Uses red-agate-svg-canvas for pure JavaScript SVG rendering (no native dependencies)
  */
 export class GraphGeneratorService {
   private readonly width: number;
   private readonly height: number;
-  private readonly chartJSNodeCanvas: ChartJSNodeCanvas;
   private readonly storage: Storage;
   private readonly bucketId: string;
   private readonly endpoint: string;
@@ -39,12 +103,6 @@ export class GraphGeneratorService {
     this.bucketId = config.bucketId;
     this.endpoint = config.endpoint;
     this.projectId = config.projectId;
-
-    this.chartJSNodeCanvas = new ChartJSNodeCanvas({
-      width: this.width,
-      height: this.height,
-      backgroundColour: 'white',
-    });
 
     const client = new Client()
       .setEndpoint(config.endpoint)
@@ -58,20 +116,26 @@ export class GraphGeneratorService {
    * Generate graph from config and upload to storage
    */
   async generateAndUpload(config: GraphConfig, fileNamePrefix: string): Promise<GraphResult> {
-    // Generate chart image
-    const imageBuffer = await this.generateChart(config);
+    console.log('[SVG Graph] Starting chart generation...');
 
-    // Upload to storage
-    const fileName = `${fileNamePrefix}-${Date.now()}.png`;
+    // Generate chart SVG
+    const svgBuffer = await this.generateChart(config);
+
+    // Upload to storage (now .svg instead of .png)
+    const fileName = `${fileNamePrefix}-${Date.now()}.svg`;
+
+    console.log('[SVG Graph] Uploading SVG to storage:', fileName);
 
     const file = await this.storage.createFile(
       this.bucketId,
       ID.unique(),
-      InputFile.fromBuffer(imageBuffer, fileName)
+      InputFile.fromBuffer(svgBuffer, fileName)
     );
 
     // Build URL
     const graphUrl = `${this.endpoint}/storage/buckets/${this.bucketId}/files/${file.$id}/view?project=${this.projectId}`;
+
+    console.log('[SVG Graph] Upload successful:', file.$id);
 
     return {
       graphImageId: file.$id,
@@ -82,15 +146,58 @@ export class GraphGeneratorService {
   }
 
   /**
-   * Generate chart image buffer
+   * Generate chart SVG buffer using pure JavaScript (red-agate-svg-canvas)
    */
   async generateChart(config: GraphConfig): Promise<Buffer> {
     const chartConfig = this.buildChartConfig(config);
-    return await this.chartJSNodeCanvas.renderToBuffer(chartConfig);
+
+    console.log('[SVG Graph] Chart type:', chartConfig.type);
+    console.log('[SVG Graph] Chart title:', chartConfig.options?.plugins?.title?.text);
+    console.log('[SVG Graph] Data points:', chartConfig.data?.labels?.length);
+    console.log('[SVG Graph] Datasets:', chartConfig.data?.datasets?.length);
+
+    // Create SVG canvas (pure JS, no native dependencies)
+    const ctx = new SvgCanvas();
+
+    // Polyfill missing Canvas 2D API methods that Chart.js 4.x requires
+    if (!(ctx as any).resetTransform) {
+      (ctx as any).resetTransform = function() {
+        this.setTransform(1, 0, 0, 1, 0, 0);
+      };
+    }
+
+    // Mock canvas element for Chart.js
+    (ctx as any).canvas = {
+      width: this.width,
+      height: this.height,
+      style: {
+        width: `${this.width}px`,
+        height: `${this.height}px`,
+      },
+    };
+    ctx.fontHeightRatio = 2;
+
+    // Create mock element that Chart.js expects
+    const mockElement = {
+      getContext: () => ctx,
+      width: this.width,
+      height: this.height,
+      style: {},
+    } as any;
+
+    // Create the chart (this renders to the SVG canvas)
+    new Chart(mockElement, chartConfig as any);
+
+    // Render to SVG string
+    const svgString = ctx.render(new Rect2D(0, 0, this.width, this.height), 'px');
+
+    console.log('[SVG Graph] SVG generated, size:', svgString.length, 'characters');
+
+    return Buffer.from(svgString, 'utf-8');
   }
 
   /**
-   * Build Chart.js configuration
+   * Build Chart.js configuration from GraphConfig
    */
   private buildChartConfig(config: GraphConfig): ChartConfiguration {
     const { type, title, xAxis, yAxis, data, options } = config;
@@ -118,7 +225,7 @@ export class GraphGeneratorService {
     });
 
     const chartConfig: ChartConfiguration = {
-      type: type as ChartType,
+      type: type,
       data: {
         labels,
         datasets,
@@ -126,6 +233,8 @@ export class GraphGeneratorService {
       options: {
         responsive: false,
         maintainAspectRatio: false,
+        animation: false, // Must be false for server-side rendering
+        devicePixelRatio: 1,
         plugins: {
           title: {
             display: true,

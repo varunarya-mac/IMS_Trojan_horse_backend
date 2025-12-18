@@ -1,13 +1,13 @@
-# IoT Refrigeration AI Chat - Architecture Documentation v2.0
+# IoT Refrigeration AI Chat - Architecture Documentation v3.0
 
-> Comprehensive technical documentation for the IoT Refrigeration AI Chat system built on Appwrite Cloud with ChromaDB RAG and synchronous processing.
+> Comprehensive technical documentation for the IoT Refrigeration AI Chat system built on Appwrite Cloud with ChromaDB RAG and **asynchronous processing with Realtime subscriptions**.
 
 ## Table of Contents
 
 - [1. System Overview](#1-system-overview)
 - [2. Architecture Diagrams](#2-architecture-diagrams)
   - [2.1 High-Level Architecture](#21-high-level-architecture)
-  - [2.2 Synchronous Request Flow](#22-synchronous-request-flow)
+  - [2.2 Asynchronous Request Flow](#22-asynchronous-request-flow)
   - [2.3 RAG Pipeline Flow](#23-rag-pipeline-flow)
 - [3. Function Documentation](#3-function-documentation)
   - [3.1 fn-chat-api](#31-fn-chat-api)
@@ -33,12 +33,13 @@ The IoT Refrigeration AI Chat system is a serverless application built on **Appw
 
 ### Key Features
 
-- **Synchronous Chat**: Real-time conversational interface with immediate responses
+- **Asynchronous Chat**: Non-blocking API with Realtime subscriptions for updates
 - **RAG-Powered Analysis**: ChromaDB vector search retrieves relevant domain knowledge
 - **CSV Analysis**: Upload refrigeration telemetry data with automatic analysis
 - **Smart Summaries**: Recommendations, datapoints, and graph generation
 - **Continuous Chat**: Maintains conversation context (last 3 messages)
 - **Security Guardrails**: Two-layer content filtering for refrigeration-only queries
+- **No Timeout Issues**: Async execution avoids Appwrite free tier 15s limit
 
 ### Technology Stack
 
@@ -54,10 +55,11 @@ The IoT Refrigeration AI Chat system is a serverless application built on **Appw
 
 ### Design Principles
 
-1. **Synchronous First**: All chat responses are synchronous (no polling required)
+1. **Async with Realtime**: API returns immediately, frontend subscribes to DB updates
 2. **RAG-First**: Use domain knowledge document before falling back to general OpenAI
 3. **Context-Aware**: Maintain last 3 messages for continuous conversation
 4. **Memory-Efficient**: Keep parsed CSV data in memory per chat session
+5. **Timeout-Resilient**: Async execution handles long-running AI processing
 
 ---
 
@@ -122,69 +124,72 @@ flowchart TB
     JobWorker -->|Cleanup orphan files| FilesBucket
 ```
 
-### 2.2 Synchronous Request Flow
+### 2.2 Asynchronous Request Flow
 
 ```mermaid
 sequenceDiagram
     participant User
+    participant Frontend
     participant ChatAPI as fn-chat-api
     participant DB as Database
-    participant Storage
+    participant Realtime as Appwrite Realtime
     participant ChatProcessor as fn-chat-processor
     participant VectorSearch as fn-vector-search
     participant ChromaDB
     participant OpenAI
+    participant Storage
 
     %% User sends message
-    User->>ChatAPI: POST /chats/{id}/messages<br/>(question + optional csvFileId)
+    User->>Frontend: Send message
+    Frontend->>ChatAPI: POST /chats/{id}/messages<br/>(question + optional csvFileId)
 
     %% Layer 1 Guardrail
     ChatAPI->>ChatAPI: Layer 1 Guardrail Check<br/>(keyword filter)
 
     alt Guardrail Rejected
-        ChatAPI-->>User: 400 Bad Request<br/>(not refrigeration related)
+        ChatAPI-->>Frontend: 400 Bad Request<br/>(not refrigeration related)
     end
 
-    %% Save user message
+    %% Save user message and create placeholder
     ChatAPI->>DB: Create User Message
-    ChatAPI->>DB: Get Last 3 Messages (context)
-    ChatAPI->>DB: Get Chat Context (parsed CSV if exists)
+    ChatAPI->>DB: Create Assistant Placeholder<br/>("Processing your question...")
+    ChatAPI->>DB: Get Context (CSV + last 3 messages)
 
-    %% Invoke processor synchronously
-    ChatAPI->>ChatProcessor: Invoke Sync<br/>(question, context, csvFileId)
+    %% Start async processing (fire and forget)
+    ChatAPI->>ChatProcessor: Invoke ASYNC<br/>(question, context, messageId)
+
+    %% Return immediately (HTTP 202)
+    ChatAPI-->>Frontend: 202 Accepted<br/>(placeholder message)
+
+    %% Frontend subscribes to updates
+    Frontend->>Realtime: Subscribe to message document
+
+    %% Background processing begins
+    Note over ChatProcessor: Processing in background...
 
     %% Vector search for domain knowledge
     ChatProcessor->>VectorSearch: Query relevant chunks
-    VectorSearch->>ChromaDB: Similarity search<br/>(question embedding)
+    VectorSearch->>ChromaDB: Similarity search
     ChromaDB-->>VectorSearch: Top 5 relevant chunks
     VectorSearch-->>ChatProcessor: Domain knowledge context
 
-    %% CSV Processing (if file provided)
-    alt Has CSV File
-        ChatProcessor->>Storage: Download CSV
-        ChatProcessor->>ChatProcessor: Parse + Extract Statistics
-        ChatProcessor->>ChatProcessor: Detect Anomalies<br/>(preserve edge cases)
-        ChatProcessor->>DB: Store Parsed Data in ChatContext
-    end
-
     %% AI Analysis
-    ChatProcessor->>ChatProcessor: Build prompt with:<br/>- Domain knowledge (RAG)<br/>- CSV summary (if exists)<br/>- Last 3 messages<br/>- User question
     ChatProcessor->>OpenAI: Chat Completion (GPT-4o)
     OpenAI-->>ChatProcessor: Analysis Response
 
-    %% Generate Summary + Graph
-    ChatProcessor->>ChatProcessor: Extract structured response:<br/>- Recommendations<br/>- Datapoints<br/>- Graph config
-
+    %% Generate Graph (if applicable)
     alt Graph Recommended
-        ChatProcessor->>ChatProcessor: Sample data with anomaly preservation
-        ChatProcessor->>ChatProcessor: Generate Chart.js image
         ChatProcessor->>Storage: Upload graph PNG
     end
 
-    %% Return response
-    ChatProcessor-->>ChatAPI: Complete Response
-    ChatAPI->>DB: Save Assistant Message
-    ChatAPI-->>User: 200 OK<br/>(full response with summary)
+    %% Update message in DB
+    ChatProcessor->>DB: Update Assistant Message<br/>(content, summaryData, graphImageId)
+    ChatProcessor->>DB: Update Chat Status<br/>(completed)
+
+    %% Realtime notification
+    DB-->>Realtime: Document updated
+    Realtime-->>Frontend: Message update event
+    Frontend->>User: Display AI response
 ```
 
 ### 2.3 RAG Pipeline Flow
@@ -228,16 +233,18 @@ flowchart LR
 
 ### 3.1 fn-chat-api
 
-**Purpose**: Primary REST API gateway with synchronous processing orchestration
+**Purpose**: Primary REST API gateway with asynchronous processing orchestration
 
 **Location**: `functions/fn-chat-api/`
 
 **Key Responsibilities**:
 - REST API endpoints for chat operations
 - Layer 1 guardrails (keyword filtering)
+- Layer 1 CSV guardrails (column validation)
 - Chat context management (last 3 messages)
-- Synchronous invocation of fn-chat-processor
+- Asynchronous invocation of fn-chat-processor (fire-and-forget)
 - File upload handling
+- Returns immediately with placeholder response
 
 #### Endpoints
 
@@ -247,13 +254,13 @@ flowchart LR
 | `GET` | `/chats` | List user's chats | Sync |
 | `GET` | `/chats/:chatId` | Get chat with messages | Sync |
 | `DELETE` | `/chats/:chatId` | Delete chat + all resources | Sync |
-| `POST` | `/chats/:chatId/messages` | Send message (main endpoint) | **Sync** |
+| `POST` | `/chats/:chatId/messages` | Send message (main endpoint) | **Async (202)** |
 | `GET` | `/chats/:chatId/messages` | List messages in chat | Sync |
 | `POST` | `/upload` | Upload CSV file | Sync |
 
 #### Main Endpoint: POST /chats/:chatId/messages
 
-This is the primary endpoint that handles all chat interactions synchronously.
+This is the primary endpoint that starts asynchronous message processing. It returns immediately with a placeholder response - the frontend should subscribe to Appwrite Realtime for updates.
 
 **Request Body**:
 ```json
@@ -265,7 +272,7 @@ This is the primary endpoint that handles all chat interactions synchronously.
 }
 ```
 
-**Response** (200 OK - Synchronous):
+**Response** (202 Accepted - Asynchronous):
 ```json
 {
   "success": true,
@@ -281,22 +288,16 @@ This is the primary endpoint that handles all chat interactions synchronously.
       "id": "msg_002",
       "chatId": "chat_abc123",
       "role": "assistant",
-      "content": "Based on my analysis of your refrigeration data...",
-      "contentType": "analysis",
-      "summaryData": {
-        "summary": "Temperature drift detected in case CASE-001...",
-        "recommendations": [...],
-        "datapoints": [...],
-        "graphConfig": {...}
-      },
-      "graphImageId": "graph_abc123",
-      "graphUrl": "https://cloud.appwrite.io/v1/storage/...",
-      "createdAt": "2025-12-17T10:31:15.000Z"
+      "content": "Processing your question...",
+      "contentType": "text",
+      "createdAt": "2025-12-17T10:31:00.000Z"
     },
-    "processingTime": 15000
+    "status": "processing"
   }
 }
 ```
+
+> **Note**: The `assistantMessage` is a placeholder. Subscribe to Appwrite Realtime for the `messages` collection to receive the complete AI response when processing finishes.
 
 #### File Structure
 
@@ -313,7 +314,7 @@ fn-chat-api/
 │   │   └── guardrails.ts          # Layer 1 keyword guardrails
 │   ├── services/
 │   │   ├── context.service.ts     # Chat context management (last 3 msgs)
-│   │   └── processor-invoker.ts   # Sync invocation of fn-chat-processor
+│   │   └── processor-invoker.ts   # Async invocation of fn-chat-processor (fire-and-forget)
 │   └── utils/
 │       └── response.ts            # Response helpers
 ├── package.json
@@ -341,11 +342,11 @@ interface ChatContext {
 
 ### 3.2 fn-chat-processor
 
-**Purpose**: Core processing engine for CSV analysis, RAG retrieval, and AI response generation
+**Purpose**: Core processing engine for CSV analysis, RAG retrieval, and AI response generation. Updates database directly when processing completes.
 
 **Location**: `functions/fn-chat-processor/`
 
-**Trigger**: Synchronous HTTP POST from fn-chat-api
+**Trigger**: Asynchronous HTTP POST from fn-chat-api (fire-and-forget)
 
 **Key Responsibilities**:
 - CSV parsing with anomaly-preserving sampling
@@ -354,6 +355,10 @@ interface ChatContext {
 - Generate structured response (recommendations, datapoints)
 - Generate graphs with edge case preservation
 - Layer 2 semantic guardrails
+- **Update message document in database when processing completes**
+- **Update chat status to 'completed' or 'error'**
+
+> **Important**: This function runs asynchronously and writes results directly to the database. The frontend receives updates via Appwrite Realtime subscriptions.
 
 #### Actions
 
@@ -496,9 +501,15 @@ interface ChatContext {
 │     └─ Render to PNG                                                │
 │     └─ Upload to storage                                            │
 │                                                                      │
-│  7. RESPONSE ASSEMBLY                                               │
+│  7. DATABASE UPDATE (Async Architecture)                            │
+│     └─ Update message document with AI response content             │
+│     └─ Store summaryData, graphImageId, processingTime              │
+│     └─ Update chat status to 'completed' or 'error'                 │
+│     └─ Triggers Appwrite Realtime notification to frontend          │
+│                                                                      │
+│  8. RESPONSE ASSEMBLY                                               │
 │     └─ Combine all data into structured response                    │
-│     └─ Return to fn-chat-api                                        │
+│     └─ Return to fn-chat-api (for logging/tracking only)            │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -1333,7 +1344,13 @@ CONTEXT_EXPIRY_HOURS=24
 
 ### 13.1 Overview
 
-The frontend integrates with the backend through a synchronous REST API. All chat responses are returned immediately (no polling required).
+The frontend integrates with the backend through an **asynchronous REST API with Realtime subscriptions**:
+
+1. **Send Message**: POST returns immediately (HTTP 202) with a placeholder message
+2. **Subscribe to Updates**: Use Appwrite Realtime to listen for message document changes
+3. **Receive Complete Response**: When fn-chat-processor finishes, it updates the message in DB, triggering a Realtime event
+
+This architecture avoids the 15-second timeout limit on Appwrite Cloud free tier.
 
 ### 13.2 Authentication
 
@@ -1380,7 +1397,7 @@ const uploadCSV = async (file: File): Promise<{ fileId: string }> => {
 };
 ```
 
-#### Send Message (Main Endpoint)
+#### Send Message (Main Endpoint - Async)
 
 ```typescript
 // POST /chats/:chatId/messages
@@ -1395,8 +1412,8 @@ interface SendMessageResponse {
   success: boolean;
   data: {
     userMessage: Message;
-    assistantMessage: AssistantMessage;
-    processingTime: number;
+    assistantMessage: AssistantMessage;  // Placeholder with "Processing..."
+    status: 'processing';
   };
 }
 
@@ -1409,11 +1426,140 @@ const sendMessage = async (
     headers,
     body: JSON.stringify(request)
   });
+  // Returns HTTP 202 Accepted with placeholder
   return response.json();
 };
 ```
 
-### 13.4 Response Handling
+### 13.4 Realtime Subscription (Required)
+
+After sending a message, subscribe to Realtime updates to receive the complete AI response:
+
+```typescript
+import { Client } from 'appwrite';
+
+const client = new Client()
+  .setEndpoint('https://fra.cloud.appwrite.io/v1')
+  .setProject(PROJECT_ID);
+
+/**
+ * Subscribe to message updates for real-time AI responses
+ */
+const subscribeToMessage = (
+  messageId: string,
+  onUpdate: (message: AssistantMessage) => void
+): () => void => {
+  const channel = `databases.${DATABASE_ID}.collections.messages.documents.${messageId}`;
+
+  const unsubscribe = client.subscribe(channel, (response) => {
+    if (response.events.includes('databases.*.collections.*.documents.*.update')) {
+      const updatedMessage = response.payload as AssistantMessage;
+
+      // Check if processing is complete
+      const isComplete = updatedMessage.content !== 'Processing your question...' &&
+                        updatedMessage.content !== 'Analyzing your refrigeration data...';
+
+      if (isComplete) {
+        onUpdate(updatedMessage);
+        unsubscribe();  // Clean up subscription
+      }
+    }
+  });
+
+  return unsubscribe;
+};
+
+/**
+ * Complete send message flow with Realtime subscription
+ */
+const sendMessageWithRealtime = async (
+  chatId: string,
+  content: string,
+  csvFileId?: string
+) => {
+  // 1. Send message (returns immediately with placeholder)
+  const response = await sendMessage(chatId, { content, csvFileId });
+  const { userMessage, assistantMessage } = response.data;
+
+  // 2. Add messages to UI immediately
+  addMessageToChat(userMessage);
+  addMessageToChat(assistantMessage);  // Shows "Processing..."
+
+  // 3. Subscribe to updates for the assistant message
+  const unsubscribe = subscribeToMessage(assistantMessage.id, (updated) => {
+    // 4. Update UI with complete response
+    updateMessageInChat(updated);
+  });
+
+  // 5. Return cleanup function for component unmount
+  return unsubscribe;
+};
+```
+
+### 13.5 React Hook Example
+
+```typescript
+import { useEffect, useRef, useCallback } from 'react';
+import { Client } from 'appwrite';
+
+const useMessageRealtime = (databaseId: string, projectId: string) => {
+  const clientRef = useRef<Client | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    clientRef.current = new Client()
+      .setEndpoint('https://fra.cloud.appwrite.io/v1')
+      .setProject(projectId);
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+  }, [projectId]);
+
+  const subscribeToMessage = useCallback((
+    messageId: string,
+    onComplete: (message: AssistantMessage) => void,
+    onError?: (error: Error) => void
+  ) => {
+    if (!clientRef.current) return;
+
+    // Clean up previous subscription
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
+
+    const channel = `databases.${databaseId}.collections.messages.documents.${messageId}`;
+
+    unsubscribeRef.current = clientRef.current.subscribe(channel, (response) => {
+      const message = response.payload as AssistantMessage;
+
+      // Check for error response
+      if (message.contentType === 'error') {
+        onError?.(new Error(message.content));
+        unsubscribeRef.current?.();
+        return;
+      }
+
+      // Check if processing is complete
+      const isProcessing = message.content === 'Processing your question...' ||
+                          message.content === 'Analyzing your refrigeration data...';
+
+      if (!isProcessing) {
+        onComplete(message);
+        unsubscribeRef.current?.();
+      }
+    });
+
+    return unsubscribeRef.current;
+  }, [databaseId]);
+
+  return { subscribeToMessage };
+};
+```
+
+### 13.6 Response Handling
 
 #### TypeScript Interfaces
 
@@ -1455,7 +1601,7 @@ interface Datapoint {
 }
 ```
 
-### 13.5 UI Component Mapping
+### 13.7 UI Component Mapping
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -1534,7 +1680,7 @@ interface Datapoint {
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 13.6 React Component Example
+### 13.8 React Component Example
 
 ```tsx
 // ChatMessage.tsx
@@ -1543,13 +1689,38 @@ import { AssistantMessage } from './types';
 import { RecommendationCard } from './RecommendationCard';
 import { DatapointsTable } from './DatapointsTable';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { Spinner } from './Spinner';
 
 interface Props {
   message: AssistantMessage;
 }
 
 export const ChatMessage: React.FC<Props> = ({ message }) => {
-  const { summaryData, graphUrl } = message;
+  const { summaryData, graphUrl, content, contentType } = message;
+
+  // Check if message is still processing
+  const isProcessing = content === 'Processing your question...' ||
+                       content === 'Analyzing your refrigeration data...';
+
+  // Handle processing state
+  if (isProcessing) {
+    return (
+      <div className="assistant-message processing">
+        <Spinner />
+        <span>{content}</span>
+      </div>
+    );
+  }
+
+  // Handle error state
+  if (contentType === 'error') {
+    return (
+      <div className="assistant-message error">
+        <span className="error-icon">⚠️</span>
+        <span>{content}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="assistant-message">
@@ -1592,7 +1763,7 @@ export const ChatMessage: React.FC<Props> = ({ message }) => {
 };
 ```
 
-### 13.7 Error Handling
+### 13.9 Error Handling
 
 ```tsx
 const sendMessage = async (chatId: string, content: string, csvFileId?: string) => {
@@ -1640,7 +1811,7 @@ const sendMessage = async (chatId: string, content: string, csvFileId?: string) 
 };
 ```
 
-### 13.8 Chat History Loading
+### 13.10 Chat History Loading
 
 ```typescript
 // Load chat list
@@ -1657,7 +1828,7 @@ const loadChat = async (chatId: string): Promise<ChatWithMessages> => {
 };
 ```
 
-### 13.9 File Upload with Progress
+### 13.11 File Upload with Progress
 
 ```typescript
 const uploadCSVWithProgress = async (
@@ -1713,36 +1884,48 @@ POST   /upload                   Upload CSV file
 
 | Caller | Calls | Method |
 |--------|-------|--------|
-| fn-chat-api | fn-chat-processor | Sync HTTP |
+| fn-chat-api | fn-chat-processor | **Async HTTP (fire-and-forget)** |
 | fn-chat-processor | fn-vector-search | Sync HTTP |
 | fn-chat-processor | OpenAI | Sync HTTP |
+| fn-chat-processor | Database | Sync HTTP (writes results) |
 | fn-vector-search | ChromaDB Cloud | Sync HTTP |
 | fn-job-worker | (cleanup only) | - |
 
-### Data Flow Summary
+### Data Flow Summary (Async Architecture)
 
 ```
-User → fn-chat-api → fn-chat-processor → fn-vector-search → ChromaDB
-                  │                   │
-                  │                   └─→ OpenAI (GPT-4o)
-                  │                   │
-                  │                   └─→ Storage (graphs)
+User → fn-chat-api → Database (placeholder)
                   │
-                  └─→ Database (messages, context)
-                  │
-User ← fn-chat-api ← Complete Response
+                  └─→ fn-chat-processor (ASYNC) → fn-vector-search → ChromaDB
+                                             │
+                                             └─→ OpenAI (GPT-4o)
+                                             │
+                                             └─→ Storage (graphs)
+                                             │
+                                             └─→ Database (final results)
+                                                        │
+                                                        └─→ Realtime event
+                                                               │
+User ← fn-chat-api ← 202 Accepted (placeholder)               │
+                                                               │
+User ← Appwrite Realtime ←─────────────────────────────────────┘
+       (complete response)
 ```
 
 ### Response Time Expectations
 
-| Scenario | Expected Time |
-|----------|---------------|
-| Text-only question (with RAG) | 3-5 seconds |
-| Question + existing CSV | 5-10 seconds |
-| Question + new CSV upload | 10-20 seconds |
-| Graph generation (on-demand) | 3-5 seconds |
+| Scenario | API Response | Complete Response (via Realtime) |
+|----------|--------------|----------------------------------|
+| Any message | **< 1 second** (202 Accepted) | Varies by processing |
+| Text-only question (with RAG) | < 1 second | 5-10 seconds |
+| Question + existing CSV | < 1 second | 10-20 seconds |
+| Question + new CSV upload | < 1 second | 15-30 seconds |
+| Graph generation (on-demand) | < 1 second | 5-10 seconds |
+
+> **Note**: The API always responds immediately with a placeholder. The "Complete Response" time indicates when the Realtime subscription will deliver the final AI response. This architecture ensures no timeout issues on Appwrite Cloud free tier (15s limit).
 
 ---
 
-*Documentation Version: 2.0.0*
+*Documentation Version: 3.0.0*
 *Last Updated: December 2025*
+*Architecture: Async with Realtime Subscriptions*
