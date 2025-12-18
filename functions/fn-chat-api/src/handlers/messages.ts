@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { FunctionContext, RouteParams } from '../types.js';
 import { getAuthenticatedUserId } from '../types.js';
 import { sendSuccess, sendError, sendHandledError, parseBody } from '../utils/response.js';
-import { checkQuestionGuardrail } from '../middleware/guardrails.js';
+import { checkQuestionGuardrail, checkCSVGuardrail } from '../middleware/guardrails.js';
 import { ChatService } from '@lib/services/chat.service.js';
 import { MessageRepository } from '@lib/repositories/message.repository.js';
 import { ChatRepository } from '@lib/repositories/chat.repository.js';
@@ -102,21 +102,11 @@ export async function sendMessage(
     // Check if we have CSV context
     const hasCSVContext = processingContext.csvData !== null;
 
-    if (!hasCSVContext) {
-      // No CSV context - provide helpful response
-      const assistantMessage = await messageRepository.createAssistantPlaceholder(
-        chatId,
-        'I can help you analyze refrigeration data. Please upload a CSV file with your telemetry data, and I\'ll provide insights on temperature patterns, alarms, and recommendations.'
-      );
-
-      return sendSuccess(
-        res,
-        {
-          userMessage: toMessageDTO(userMessage),
-          assistantMessage: toMessageDTO(assistantMessage),
-        },
-        201
-      );
+    // Validate CSV columns if CSV is provided (Layer 1 CSV Guardrail)
+    if (hasCSVContext && processingContext.csvData) {
+      log('Running CSV guardrail check');
+      const csvGuardrailResult = checkCSVGuardrail(processingContext.csvData.headers);
+      log(`CSV guardrail passed. Matched columns: ${csvGuardrailResult.matchedKeywords?.join(', ') || 'none'}`);
     }
 
     // Update chat status to processing
@@ -125,19 +115,19 @@ export async function sendMessage(
     // Create placeholder assistant message
     const assistantMessage = await messageRepository.createAssistantPlaceholder(
       chatId,
-      'Analyzing your refrigeration data...'
+      hasCSVContext ? 'Analyzing your refrigeration data...' : 'Processing your question...'
     );
     log(`Created assistant placeholder: ${assistantMessage.$id}`);
 
     try {
-      // Invoke processor synchronously
-      log('Invoking chat processor...');
+      // Invoke processor synchronously (with or without CSV)
+      log(`Invoking chat processor... (hasCSV: ${hasCSVContext})`);
       const processor = new ProcessorInvokerService();
       const result = await processor.processMessage({
         chatId,
         messageId: assistantMessage.$id,
         userQuestion: content,
-        csvData: processingContext.csvData!,
+        csvData: processingContext.csvData || undefined,
         messageContext: processingContext.messageContext,
       });
       log(`Processor completed in ${result.processingTimeMs}ms`);
