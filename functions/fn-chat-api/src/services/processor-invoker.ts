@@ -92,21 +92,44 @@ export class ProcessorInvokerService {
    * Invoke processor to handle message
    */
   async processMessage(request: ProcessMessageRequest): Promise<ProcessMessageResult> {
+    // Build payload
+    const payload = {
+      action: 'process_message',
+      chatId: request.chatId,
+      messageId: request.messageId,
+      userQuestion: request.userQuestion,
+      csvData: request.csvData,
+      messageContext: request.messageContext,
+    };
+
+    // Debug logging
+    console.log('[ProcessorInvoker] Function ID:', this.functionId);
+    console.log('[ProcessorInvoker] Request payload:', JSON.stringify({
+      ...payload,
+      csvData: payload.csvData ? {
+        headers: payload.csvData.headers,
+        rowCount: payload.csvData.rows?.length,
+        totalRows: payload.csvData.totalRows,
+      } : undefined,
+    }, null, 2));
+
+    const payloadString = JSON.stringify(payload);
+    console.log('[ProcessorInvoker] Payload string length:', payloadString.length);
+    console.log('[ProcessorInvoker] Payload string (first 500 chars):', payloadString.substring(0, 500));
+
     const execution = await this.functions.createExecution(
       this.functionId,
-      JSON.stringify({
-        action: 'process_message',
-        chatId: request.chatId,
-        messageId: request.messageId,
-        userQuestion: request.userQuestion,
-        csvData: request.csvData,
-        messageContext: request.messageContext,
-      }),
+      payloadString,
       false, // async = false (synchronous)
       '/',
       ExecutionMethod.POST,
       { 'Content-Type': 'application/json' }
     );
+
+    // Debug logging for response
+    console.log('[ProcessorInvoker] Execution status:', execution.status);
+    console.log('[ProcessorInvoker] Execution errors:', execution.errors);
+    console.log('[ProcessorInvoker] Response body (first 500 chars):', execution.responseBody?.substring(0, 500));
 
     // Check execution status
     if (execution.status !== 'completed') {
@@ -117,6 +140,7 @@ export class ProcessorInvokerService {
     const response = JSON.parse(execution.responseBody);
 
     if (!response.success) {
+      console.log('[ProcessorInvoker] Error response:', JSON.stringify(response.error, null, 2));
       throw new Error(response.error?.message || 'Processing failed');
     }
 

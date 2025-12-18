@@ -49,11 +49,25 @@ function getConfig() {
 /**
  * Parse request body
  */
-function parseRequest(body: string): ChatProcessorRequest | null {
+function parseRequest(body: string | object): ChatProcessorRequest | null {
   try {
-    if (!body || body === '') return null;
-    return JSON.parse(body) as ChatProcessorRequest;
-  } catch {
+    // Handle case where body might already be an object (Appwrite may pre-parse JSON)
+    if (typeof body === 'object' && body !== null) {
+      console.log('[parseRequest] Body is already an object, returning as-is');
+      return body as ChatProcessorRequest;
+    }
+
+    if (!body || body === '') {
+      console.log('[parseRequest] Body is empty or null');
+      return null;
+    }
+
+    console.log('[parseRequest] Parsing JSON string...');
+    const parsed = JSON.parse(body as string) as ChatProcessorRequest;
+    console.log('[parseRequest] JSON parse successful');
+    return parsed;
+  } catch (e) {
+    console.log('[parseRequest] JSON parse error:', e instanceof Error ? e.message : String(e));
     return null;
   }
 }
@@ -361,6 +375,20 @@ export default async function (context: FunctionContext): Promise<unknown> {
 
   log(`Chat Processor: ${req.method} ${req.path}`);
 
+  // Debug logging for request body
+  log(`[DEBUG] req.body type: ${typeof req.body}`);
+  log(`[DEBUG] req.body is null/undefined: ${req.body === null || req.body === undefined}`);
+  log(`[DEBUG] req.body is empty string: ${req.body === ''}`);
+  if (typeof req.body === 'string') {
+    log(`[DEBUG] req.body (string, first 500 chars): ${req.body.substring(0, 500)}`);
+  } else if (typeof req.body === 'object') {
+    log(`[DEBUG] req.body (object): ${JSON.stringify(req.body).substring(0, 500)}`);
+  }
+  log(`[DEBUG] req.bodyRaw type: ${typeof req.bodyRaw}`);
+  if (req.bodyRaw) {
+    log(`[DEBUG] req.bodyRaw (first 500 chars): ${req.bodyRaw.substring(0, 500)}`);
+  }
+
   // Handle OPTIONS for CORS
   if (req.method === 'OPTIONS') {
     return res.send('', 204, {
@@ -376,12 +404,21 @@ export default async function (context: FunctionContext): Promise<unknown> {
   }
 
   // Parse request
+  log(`[DEBUG] Attempting to parse request body...`);
   const request = parseRequest(req.body);
+  log(`[DEBUG] Parse result: ${request ? 'success' : 'null/failed'}`);
+  if (request) {
+    log(`[DEBUG] Parsed action: ${request.action}`);
+    log(`[DEBUG] Parsed userQuestion: ${request.userQuestion?.substring(0, 100)}`);
+    log(`[DEBUG] Parsed csvData present: ${!!request.csvData}`);
+  }
   if (!request) {
+    log(`[DEBUG] Parse failed - returning INVALID_REQUEST error`);
     return sendError(res, 'INVALID_REQUEST', 'Invalid request body', 400);
   }
 
   if (!request.action) {
+    log(`[DEBUG] Action missing - returning MISSING_ACTION error`);
     return sendError(res, 'MISSING_ACTION', 'Action is required', 400);
   }
 
