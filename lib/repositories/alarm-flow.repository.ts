@@ -4,15 +4,14 @@
  */
 
 import { Query } from 'node-appwrite';
-import { BaseRepository, type QueryOptions, type PaginatedResult } from './base.repository.js';
+import { BaseRepository } from './base.repository.js';
 import { COLLECTION_IDS, type AlarmPatternEntity } from '../types/entities.js';
-import type { AlarmPatternDTO, AlarmFlowDTO, AlarmVersionDTO, AlarmFlowsListDTO, AlarmFlowsByDisciplineDTO } from '../types/dtos.js';
+import type { AlarmPatternDTO, AlarmVersionDTO, AlarmFlowsListDTO, AlarmFlowsByDisciplineDTO } from '../types/dtos.js';
 import type { ProgramModule } from '../types/program-modules.js';
 import { parseProgramModules, stringifyProgramModules } from '../types/program-modules.js';
 import { DisciplineRepository, DisciplineTypeRepository } from './discipline.repository.js';
 import { ClassRepository } from './class.repository.js';
 import { NotFoundError, ConflictError, DatabaseError } from '../utils/errors.js';
-import { generateId } from '../utils/db.js';
 import type { Logger } from '../types/logger.js';
 
 /**

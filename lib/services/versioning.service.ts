@@ -4,7 +4,7 @@
  */
 
 import { AlarmFlowRepository, type UpdateAlarmPatternInput } from '../repositories/alarm-flow.repository.js';
-import type { AlarmPatternDTO, AlarmVersionDTO, VersionHistoryDTO } from '../types/dtos.js';
+import type { AlarmPatternDTO, VersionHistoryDTO } from '../types/dtos.js';
 import type { ProgramModule } from '../types/program-modules.js';
 import { NotFoundError, ValidationError, DatabaseError } from '../utils/errors.js';
 

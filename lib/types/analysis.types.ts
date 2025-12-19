@@ -3,8 +3,8 @@
  * These interfaces represent AI analysis input/output structures
  */
 
-import type { ParsedCSVData, GraphData } from './csv.types.js';
-import type { SummaryData, TokenUsage, GraphType, GraphRecommendation } from './message.types.js';
+import type { ParsedCSVData } from './csv.types.js';
+import type { SummaryData, TokenUsage, GraphType } from './message.types.js';
 
 /**
  * Analysis engine input (internal function)

@@ -6,7 +6,20 @@
       "Bash(git -C /Users/varun.arya/Desktop/IMS_trojan_horse/IMS_Trojan_horse_backend show 1d815c7 -- alarm-management-api/src/utils/response.ts)",
       "Bash(git -C /Users/varun.arya/Desktop/IMS_trojan_horse/IMS_Trojan_horse_backend show:*)",
       "Bash(grep:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(npm run build:fn-csv-handler:*)",
+      "Bash(npm run build:fn-chat-api:*)",
+      "Bash(npm run build:fn-alarm-management:*)",
+      "Bash(npm run build:fn-analysis-engine:*)",
+      "Bash(npm run build:fn-job-worker:*)",
+      "Bash(npm run build:lib:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:fn-vector-search:*)",
+      "Bash(npm run build:fn-chat-processor:*)",
+      "WebSearch",
+      "Bash(xargs:*)"
     ]
   }
 }

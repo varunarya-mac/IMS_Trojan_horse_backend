@@ -1,0 +1,1497 @@
+openapi: 3.0.3
+info:
+  title: IoT Alarm Flow Management API
+  description: |
+    Backend API for IoT alarm management and refrigeration data analysis.
+
+    This API provides two main capabilities:
+    - **Alarm Management**: CRUD operations for alarm patterns with versioning
+    - **Refrigeration Chat**: AI-powered analysis of refrigeration CSV data
+
+    ## Authentication
+    All endpoints require Appwrite session authentication. Include the following headers:
+    - `X-Appwrite-Project`: Your project ID
+    - `X-Appwrite-Key`: API key or session token
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: ISC
+
+servers:
+  - url: https://fra.cloud.appwrite.io/v1/functions
+    description: Appwrite Cloud (Frankfurt)
+
+tags:
+  - name: Disciplines
+    description: Discipline management operations
+  - name: Alarm Flows
+    description: Alarm flow retrieval operations
+  - name: Alarm Patterns
+    description: Alarm pattern CRUD and versioning
+  - name: Classes
+    description: Class configuration management
+  - name: Import
+    description: Configuration import operations
+  - name: Chats
+    description: Chat session management
+  - name: Messages
+    description: Chat message operations
+
+paths:
+  # ============================================
+  # fn-alarm-management endpoints
+  # ============================================
+
+  /fn-alarm-management/disciplines:
+    get:
+      tags:
+        - Disciplines
+      summary: List all disciplines
+      description: Retrieves all disciplines with their associated discipline types
+      operationId: getDisciplines
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DisciplinesListDTO'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fn-alarm-management/alarm-flows:
+    get:
+      tags:
+        - Alarm Flows
+      summary: Get alarm flows
+      description: |
+        Retrieves alarm flows with optional filtering.
+        - Without parameters: Returns all alarm flows grouped by discipline
+        - With disciplineId: Returns flows for specific discipline
+        - With disciplineTypeId: Returns flows for specific discipline type
+      operationId: getAlarmFlows
+      parameters:
+        - name: disciplineId
+          in: query
+          description: Filter by discipline ID
+          schema:
+            type: string
+        - name: disciplineTypeId
+          in: query
+          description: Filter by discipline type ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - $ref: '#/components/schemas/AlarmFlowsListDTO'
+                          - $ref: '#/components/schemas/AlarmFlowsByDisciplineDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /fn-alarm-management/alarm-patterns:
+    post:
+      tags:
+        - Alarm Patterns
+      summary: Create alarm pattern
+      description: Creates a new alarm pattern with version 1
+      operationId: createAlarmPattern
+      parameters:
+        - name: disciplineTypeId
+          in: query
+          required: true
+          description: Discipline type ID for the new pattern
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAlarmPatternRequest'
+      responses:
+        '201':
+          description: Alarm pattern created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AlarmPatternDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /fn-alarm-management/alarm-patterns/{key}:
+    get:
+      tags:
+        - Alarm Patterns
+      summary: Get alarm pattern
+      description: Retrieves the latest version of an alarm pattern by key
+      operationId: getAlarmPattern
+      parameters:
+        - $ref: '#/components/parameters/AlarmPatternKey'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AlarmFlowDTO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Alarm Patterns
+      summary: Update alarm pattern
+      description: Updates an alarm pattern, creating a new version
+      operationId: updateAlarmPattern
+      parameters:
+        - $ref: '#/components/parameters/AlarmPatternKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAlarmPatternRequest'
+      responses:
+        '200':
+          description: Alarm pattern updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AlarmPatternDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Alarm Patterns
+      summary: Delete alarm pattern
+      description: Soft deletes an alarm pattern (marks as not latest)
+      operationId: deleteAlarmPattern
+      parameters:
+        - $ref: '#/components/parameters/AlarmPatternKey'
+      responses:
+        '200':
+          description: Alarm pattern deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted:
+                            type: boolean
+                          alarmPatternKey:
+                            type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /fn-alarm-management/alarm-patterns/{key}/versions:
+    get:
+      tags:
+        - Alarm Patterns
+      summary: Get version history
+      description: Retrieves the version history for an alarm pattern
+      operationId: getAlarmVersions
+      parameters:
+        - $ref: '#/components/parameters/AlarmPatternKey'
+        - name: limit
+          in: query
+          description: Maximum versions to return
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          description: Number of versions to skip
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/VersionHistoryDTO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /fn-alarm-management/alarm-patterns/{key}/rollback:
+    post:
+      tags:
+        - Alarm Patterns
+      summary: Rollback alarm pattern
+      description: Rolls back an alarm pattern to a specific version
+      operationId: rollbackAlarm
+      parameters:
+        - $ref: '#/components/parameters/AlarmPatternKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackAlarmPatternRequest'
+      responses:
+        '200':
+          description: Rollback successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AlarmPatternDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /fn-alarm-management/classes:
+    get:
+      tags:
+        - Classes
+      summary: Get classes
+      description: Retrieves classes filtered by discipline type
+      operationId: getClasses
+      parameters:
+        - name: disciplineTypeId
+          in: query
+          required: true
+          description: Discipline type ID to filter by
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ClassDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /fn-alarm-management/classes/{id}:
+    put:
+      tags:
+        - Classes
+      summary: Update class
+      description: Updates a class configuration
+      operationId: updateClass
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Class ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClassRequest'
+      responses:
+        '200':
+          description: Class updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ClassDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /fn-alarm-management/import:
+    post:
+      tags:
+        - Import
+      summary: Import configuration
+      description: Imports alarm configuration from JSON
+      operationId: importConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportConfigRequest'
+      responses:
+        '200':
+          description: Import successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ImportSummaryDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ============================================
+  # fn-chat-api endpoints
+  # ============================================
+
+  /fn-chat-api/chats:
+    get:
+      tags:
+        - Chats
+      summary: List chats
+      description: Retrieves a paginated list of user's chat sessions
+      operationId: listChats
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum chats to return (max 100)
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of chats to skip
+          schema:
+            type: integer
+            default: 0
+        - name: status
+          in: query
+          description: Filter by chat status
+          schema:
+            $ref: '#/components/schemas/ChatStatus'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ListChatsResponse'
+
+    post:
+      tags:
+        - Chats
+      summary: Create chat
+      description: Creates a new chat session
+      operationId: createChat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatRequest'
+      responses:
+        '201':
+          description: Chat created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CreateChatResponse'
+
+  /fn-chat-api/chats/{chatId}:
+    get:
+      tags:
+        - Chats
+      summary: Get chat
+      description: Retrieves a chat session with details
+      operationId: getChat
+      parameters:
+        - $ref: '#/components/parameters/ChatId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/GetChatResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Chats
+      summary: Delete chat
+      description: Deletes a chat and all associated resources
+      operationId: deleteChat
+      parameters:
+        - $ref: '#/components/parameters/ChatId'
+      responses:
+        '200':
+          description: Chat deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeleteChatResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /fn-chat-api/chats/{chatId}/messages:
+    get:
+      tags:
+        - Messages
+      summary: List messages
+      description: Retrieves messages for a chat session
+      operationId: listMessages
+      parameters:
+        - $ref: '#/components/parameters/ChatId'
+        - name: limit
+          in: query
+          description: Maximum messages to return
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          description: Number of messages to skip
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          messages:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/MessageDTO'
+                          total:
+                            type: integer
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Messages
+      summary: Send message
+      description: |
+        Sends a message in a chat session.
+        Processing may be synchronous (simple questions) or asynchronous (CSV analysis).
+      operationId: sendMessage
+      parameters:
+        - $ref: '#/components/parameters/ChatId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SendMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    AlarmPatternKey:
+      name: key
+      in: path
+      required: true
+      description: Alarm pattern key (unique identifier)
+      schema:
+        type: string
+
+    ChatId:
+      name: chatId
+      in: path
+      required: true
+      description: Chat session ID
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ============================================
+    # Common schemas
+    # ============================================
+
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+        meta:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    # ============================================
+    # Alarm Management schemas
+    # ============================================
+
+    DisciplineDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        enterpriseName:
+          type: string
+        enterpriseVersion:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        types:
+          type: array
+          items:
+            $ref: '#/components/schemas/DisciplineTypeDTO'
+
+    DisciplineTypeDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        disciplineId:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        discipline:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+
+    DisciplinesListDTO:
+      type: object
+      properties:
+        disciplines:
+          type: array
+          items:
+            $ref: '#/components/schemas/DisciplineDTO'
+
+    AlarmPatternDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        disciplineTypeId:
+          type: string
+        alarmPatternKey:
+          type: string
+        version:
+          type: integer
+        isLatest:
+          type: boolean
+        no:
+          type: integer
+        alarmId:
+          type: string
+        textExpr:
+          type: string
+        genericFamily:
+          type: string
+        genericId:
+          type: string
+        trapPdu1:
+          type: string
+        trapFlag:
+          type: integer
+        suppressionPeriod:
+          type: integer
+        programModules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramModule'
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          nullable: true
+        changeDescription:
+          type: string
+          nullable: true
+
+    ProgramModule:
+      type: object
+      properties:
+        module:
+          type: string
+        classId:
+          type: string
+        severity:
+          type: string
+
+    AlarmFlowDTO:
+      type: object
+      properties:
+        discipline:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        disciplineType:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        alarm:
+          $ref: '#/components/schemas/AlarmPatternDTO'
+        relatedClasses:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClassDTO'
+
+    AlarmFlowsListDTO:
+      type: object
+      properties:
+        discipline:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        disciplineType:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        alarms:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlarmPatternDTO'
+        classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClassDTO'
+
+    AlarmFlowsByDisciplineDTO:
+      type: object
+      properties:
+        discipline:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        disciplineTypes:
+          type: array
+          items:
+            type: object
+            properties:
+              disciplineType:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+              alarms:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlarmPatternDTO'
+              classes:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClassDTO'
+
+    AlarmVersionDTO:
+      type: object
+      properties:
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          nullable: true
+        changeDescription:
+          type: string
+          nullable: true
+        isLatest:
+          type: boolean
+        alarm:
+          $ref: '#/components/schemas/AlarmPatternDTO'
+
+    VersionHistoryDTO:
+      type: object
+      properties:
+        alarmPatternKey:
+          type: string
+        currentVersion:
+          type: integer
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlarmVersionDTO'
+
+    ClassDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        disciplineTypeId:
+          type: string
+        classId:
+          type: string
+        description:
+          type: string
+        defaultFlag:
+          type: integer
+        data:
+          $ref: '#/components/schemas/SeverityThreshold'
+        patterns:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ClassPattern'
+        createdAt:
+          type: string
+          format: date-time
+
+    SeverityThreshold:
+      type: object
+      nullable: true
+      properties:
+        ok:
+          type: array
+          items:
+            oneOf:
+              - type: number
+              - type: string
+        recovering:
+          type: array
+          items:
+            oneOf:
+              - type: number
+              - type: string
+        warning:
+          type: array
+          items:
+            oneOf:
+              - type: number
+              - type: string
+        minor:
+          type: array
+          items:
+            oneOf:
+              - type: number
+              - type: string
+        major:
+          type: array
+          items:
+            oneOf:
+              - type: number
+              - type: string
+        critical:
+          type: array
+          items:
+            oneOf:
+              - type: number
+              - type: string
+        terminal:
+          type: array
+          items:
+            oneOf:
+              - type: number
+              - type: string
+
+    ClassPattern:
+      type: object
+      properties:
+        pattern:
+          type: string
+        flags:
+          type: integer
+
+    CreateAlarmPatternRequest:
+      type: object
+      required:
+        - no
+        - alarmId
+        - textExpr
+        - genericFamily
+        - genericId
+        - trapPdu1
+        - trapFlag
+        - suppressionPeriod
+      properties:
+        no:
+          type: integer
+        alarmId:
+          type: string
+        textExpr:
+          type: string
+        genericFamily:
+          type: string
+        genericId:
+          type: string
+        trapPdu1:
+          type: string
+        trapFlag:
+          type: integer
+        suppressionPeriod:
+          type: integer
+        programModules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramModule'
+        createdBy:
+          type: string
+
+    UpdateAlarmPatternRequest:
+      type: object
+      required:
+        - changeDescription
+        - updatedBy
+      properties:
+        textExpr:
+          type: string
+        genericFamily:
+          type: string
+        genericId:
+          type: string
+        trapPdu1:
+          type: string
+        trapFlag:
+          type: integer
+        suppressionPeriod:
+          type: integer
+        programModules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramModule'
+        changeDescription:
+          type: string
+        updatedBy:
+          type: string
+
+    RollbackAlarmPatternRequest:
+      type: object
+      required:
+        - targetVersion
+        - rollbackBy
+      properties:
+        targetVersion:
+          type: integer
+        rollbackBy:
+          type: string
+        reason:
+          type: string
+
+    UpdateClassRequest:
+      type: object
+      properties:
+        description:
+          type: string
+        defaultFlag:
+          type: integer
+        data:
+          type: object
+        patterns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClassPattern'
+
+    ImportConfigRequest:
+      type: object
+      required:
+        - jsonContent
+      properties:
+        jsonContent:
+          type: string
+          description: Raw JSON content to import
+        overwriteExisting:
+          type: boolean
+          default: false
+
+    ImportSummaryDTO:
+      type: object
+      properties:
+        disciplinesCreated:
+          type: integer
+        disciplineTypesCreated:
+          type: integer
+        alarmPatternsCreated:
+          type: integer
+        classesCreated:
+          type: integer
+        fieldsCreated:
+          type: integer
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportErrorDetail'
+
+    ImportErrorDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [discipline, disciplineType, alarmPattern, class, field]
+        name:
+          type: string
+        message:
+          type: string
+
+    # ============================================
+    # Chat schemas
+    # ============================================
+
+    ChatStatus:
+      type: string
+      enum: [active, processing, completed, error]
+
+    DeviceType:
+      type: string
+      enum: [pack, case, mixed]
+
+    ChatDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/ChatStatus'
+        csvFileId:
+          type: string
+          nullable: true
+        csvFileName:
+          type: string
+          nullable: true
+        csvFileSize:
+          type: integer
+          nullable: true
+        deviceType:
+          $ref: '#/components/schemas/DeviceType'
+        storeInfo:
+          $ref: '#/components/schemas/StoreInfo'
+        metadata:
+          $ref: '#/components/schemas/CSVMetadata'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ChatListItemDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/ChatStatus'
+        deviceType:
+          $ref: '#/components/schemas/DeviceType'
+        csvFileName:
+          type: string
+          nullable: true
+        messageCount:
+          type: integer
+        lastMessageAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    StoreInfo:
+      type: object
+      nullable: true
+      properties:
+        storeNumber:
+          type: string
+          nullable: true
+        storeName:
+          type: string
+          nullable: true
+        caseId:
+          type: string
+          nullable: true
+        packId:
+          type: string
+          nullable: true
+        caseClass:
+          type: string
+          nullable: true
+        packClass:
+          type: string
+          nullable: true
+        caseName:
+          type: string
+          nullable: true
+        packName:
+          type: string
+          nullable: true
+
+    CSVMetadata:
+      type: object
+      nullable: true
+      properties:
+        rowCount:
+          type: integer
+        columnCount:
+          type: integer
+        columns:
+          type: array
+          items:
+            type: string
+        timeRange:
+          type: object
+          nullable: true
+          properties:
+            start:
+              type: string
+            end:
+              type: string
+        hasPackData:
+          type: boolean
+        hasCaseData:
+          type: boolean
+        fileSizeBytes:
+          type: integer
+
+    CreateChatRequest:
+      type: object
+      properties:
+        title:
+          type: string
+
+    CreateChatResponse:
+      type: object
+      properties:
+        chatId:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/ChatStatus'
+        createdAt:
+          type: string
+          format: date-time
+
+    ListChatsResponse:
+      type: object
+      properties:
+        chats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatListItemDTO'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    GetChatResponse:
+      type: object
+      properties:
+        chat:
+          $ref: '#/components/schemas/ChatDTO'
+        storeInfo:
+          $ref: '#/components/schemas/StoreInfo'
+        csvMetadata:
+          $ref: '#/components/schemas/CSVMetadata'
+
+    DeleteChatResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        deletedResources:
+          type: object
+          properties:
+            chat:
+              type: boolean
+            messages:
+              type: integer
+            csvFile:
+              type: boolean
+            graphFiles:
+              type: integer
+            context:
+              type: boolean
+
+    # ============================================
+    # Message schemas
+    # ============================================
+
+    MessageRole:
+      type: string
+      enum: [user, assistant, system]
+
+    MessageContentType:
+      type: string
+      enum: [text, summary, graph, error]
+
+    MessageDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        chatId:
+          type: string
+        role:
+          $ref: '#/components/schemas/MessageRole'
+        content:
+          type: string
+        contentType:
+          $ref: '#/components/schemas/MessageContentType'
+        summaryData:
+          $ref: '#/components/schemas/SummaryData'
+        graphImageId:
+          type: string
+          nullable: true
+        graphImageUrl:
+          type: string
+          nullable: true
+        datapointsData:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/Datapoint'
+        processingTime:
+          type: integer
+          nullable: true
+          description: Processing time in milliseconds
+        tokenUsage:
+          $ref: '#/components/schemas/TokenUsage'
+        createdAt:
+          type: string
+          format: date-time
+
+    SummaryData:
+      type: object
+      nullable: true
+      properties:
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recommendation'
+        summary:
+          $ref: '#/components/schemas/Summary'
+        datapoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Datapoint'
+        graphRecommendation:
+          $ref: '#/components/schemas/GraphRecommendation'
+
+    Recommendation:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+        recommendedActions:
+          type: array
+          items:
+            type: string
+        evidenceTrail:
+          type: array
+          items:
+            type: string
+
+    Summary:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        recommendedActions:
+          type: array
+          items:
+            type: string
+
+    Datapoint:
+      type: object
+      properties:
+        name:
+          type: string
+        metric:
+          type: string
+        status:
+          type: string
+          enum: [Critical, Warning, Okay]
+        history:
+          type: integer
+          nullable: true
+
+    GraphRecommendation:
+      type: object
+      nullable: true
+      properties:
+        shouldGenerateGraph:
+          type: boolean
+        graphType:
+          type: string
+          enum: [temperature_timeline, defrost_cycles, alarm_patterns, pressure_timeline, compressor_status]
+        columns:
+          type: array
+          items:
+            type: string
+        title:
+          type: string
+        highlightAlerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertPoint'
+
+    AlertPoint:
+      type: object
+      properties:
+        timestamp:
+          type: string
+        type:
+          type: string
+          enum: [high_temp, low_temp, defrost_failure, anomaly]
+        value:
+          type: number
+
+    TokenUsage:
+      type: object
+      nullable: true
+      properties:
+        promptTokens:
+          type: integer
+        completionTokens:
+          type: integer
+        totalTokens:
+          type: integer
+        model:
+          type: string
+
+    SendMessageRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          description: User's question or message
+        fileId:
+          type: string
+          description: Optional pre-uploaded CSV file ID
+
+    SendMessageResponse:
+      type: object
+      properties:
+        messageId:
+          type: string
+        chatId:
+          type: string
+        role:
+          type: string
+          enum: [user]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        response:
+          type: object
+          description: Present for immediate responses
+          properties:
+            messageId:
+              type: string
+            content:
+              type: string
+            contentType:
+              $ref: '#/components/schemas/MessageContentType'
+            summaryData:
+              $ref: '#/components/schemas/SummaryData'
+        job:
+          type: object
+          description: Present when background processing is required
+          properties:
+            jobId:
+              type: string
+            status:
+              type: string
+            estimatedTime:
+              type: integer
+              description: Estimated time in seconds

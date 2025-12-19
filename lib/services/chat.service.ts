@@ -18,7 +18,6 @@ import type {
   CreateChatResponse,
   DeleteChatResponse,
 } from '../types/chat.types.js';
-import type { MessageDTO } from '../types/message.types.js';
 import type { Logger } from '../types/logger.js';
 import { createNoOpLogger } from '../types/logger.js';
 

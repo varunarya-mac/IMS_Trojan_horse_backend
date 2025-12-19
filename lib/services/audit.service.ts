@@ -267,7 +267,7 @@ export class AuditService {
   /**
    * Search audit entries by user
    */
-  async getAuditsByUser(userId: string, limit: number = 100): Promise<AuditLogEntry[]> {
+  async getAuditsByUser(userId: string, _limit: number = 100): Promise<AuditLogEntry[]> {
     try {
       // This would require a different query approach
       // For now, we return an empty array as this needs additional indexing

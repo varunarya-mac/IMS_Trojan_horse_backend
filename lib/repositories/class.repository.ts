@@ -145,7 +145,7 @@ export class ClassRepository extends BaseRepository<ClassEntity> {
     try {
       this.logger.log(`[ClassRepository] Updating class: ${id}`);
 
-      const existing = await this.findByIdOrFail(id, 'Class');
+      await this.findByIdOrFail(id, 'Class');
 
       const updateData: Partial<ClassEntity> = {};
 

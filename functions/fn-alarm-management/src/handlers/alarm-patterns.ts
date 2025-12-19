@@ -9,20 +9,13 @@ import { getUserContext } from '../types.js';
 import { sendSuccess, handleError, getRequestData, parseBody } from '../utils/response.js';
 import { AlarmFlowRepository } from '@lib/repositories/alarm-flow.repository.js';
 import { VersioningService } from '@lib/services/versioning.service.js';
-import { ValidationError, NotFoundError } from '@lib/utils/errors.js';
+import { ValidationError } from '@lib/utils/errors.js';
 import type { ProgramModule } from '@lib/types/program-modules.js';
-import {
-  CreateAlarmPatternSchema,
-  UpdateAlarmPatternSchema,
-} from '@lib/utils/validation.js';
+import { CreateAlarmPatternSchema } from '@lib/utils/validation.js';
 
 // Request schemas for this handler
 const GetAlarmFlowsRequestSchema = z.object({
   disciplineId: z.string().min(1).optional(),
-});
-
-const GetAlarmPatternRequestSchema = z.object({
-  version: z.coerce.number().int().positive().optional(),
 });
 
 /**

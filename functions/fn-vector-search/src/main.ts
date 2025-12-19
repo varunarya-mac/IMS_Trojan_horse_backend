@@ -14,7 +14,6 @@ import type {
   FunctionContext,
   VectorSearchRequest,
   VectorSearchResponse,
-  VectorSearchAction,
 } from './types.js';
 import { SearchService } from './services/search.service.js';
 

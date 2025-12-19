@@ -4,7 +4,7 @@
  */
 
 import { Query } from 'node-appwrite';
-import { BaseRepository, type QueryOptions, type PaginatedResult } from './base.repository.js';
+import { BaseRepository } from './base.repository.js';
 import { COLLECTION_IDS } from '../types/entities.js';
 import type { ChatContextEntity, CachedCSVData } from '../types/context.types.js';
 import type { BaseEntity } from '../types/entities.js';

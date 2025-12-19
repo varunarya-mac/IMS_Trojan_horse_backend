@@ -3,7 +3,7 @@
  */
 
 import type { FunctionContext } from '../types.js';
-import { ApiError, handleError, isApiError } from '@lib/utils/errors.js';
+import { ApiError, handleError } from '@lib/utils/errors.js';
 
 /**
  * Standard API response format

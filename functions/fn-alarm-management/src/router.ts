@@ -90,7 +90,7 @@ function normalizePath(path: string): string {
 function matchRoute(
   path: string,
   pattern: string,
-  paramNames: string[]
+  _paramNames: string[]
 ): RouteParams | null {
   const pathParts = path.split('/').filter(Boolean);
   const patternParts = pattern.split('/').filter(Boolean);

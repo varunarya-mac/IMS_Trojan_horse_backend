@@ -16,12 +16,9 @@ import type {
   ChatProcessorResponse,
   ProcessMessageResult,
   GenerateGraphResult,
-  Recommendation,
-  DataPoint,
   GraphConfig,
 } from './types.js';
 import { CSVProcessorService } from './services/csv-processor.service.js';
-import { CSVSamplerService } from './services/csv-sampler.service.js';
 import { OpenAIService } from './services/openai.service.js';
 import { RAGService } from './services/rag.service.js';
 import { GuardrailService } from './services/guardrail.service.js';
@@ -411,7 +408,7 @@ async function handleGenerateGraph(
   context: FunctionContext,
   request: ChatProcessorRequest
 ): Promise<ChatProcessorResponse> {
-  const { log, error: logError } = context;
+  const { log } = context;
 
   const { graphConfig } = request;
 

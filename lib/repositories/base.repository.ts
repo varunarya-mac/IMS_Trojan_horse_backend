@@ -3,7 +3,7 @@
  * Abstract base class providing common CRUD operations for all repositories
  */
 
-import { Query, type Models } from 'node-appwrite';
+import { Query } from 'node-appwrite';
 import { getDatabases, getDatabaseId, generateId, getPaginationQueries } from '../utils/db.js';
 import { DatabaseError, NotFoundError } from '../utils/errors.js';
 import type { BaseEntity } from '../types/entities.js';

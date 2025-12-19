@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import type { FunctionContext, RouteParams } from '../types.js';
 import { getAuthenticatedUserId } from '../types.js';
-import { sendSuccess, sendError, sendHandledError, parseBody } from '../utils/response.js';
+import { sendSuccess, sendHandledError, parseBody } from '../utils/response.js';
 import { ChatService } from '@lib/services/chat.service.js';
 import { ValidationError } from '@lib/utils/errors.js';
 import type { ChatStatus } from '@lib/types/chat.types.js';

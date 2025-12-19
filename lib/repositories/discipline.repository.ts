@@ -4,10 +4,9 @@
  */
 
 import { Query } from 'node-appwrite';
-import { BaseRepository, type QueryOptions, type PaginatedResult } from './base.repository.js';
+import { BaseRepository } from './base.repository.js';
 import { COLLECTION_IDS, type DisciplineEntity, type DisciplineTypeEntity } from '../types/entities.js';
 import type { DisciplineDTO, DisciplineTypeDTO } from '../types/dtos.js';
-import { getDatabases, getDatabaseId, generateId } from '../utils/db.js';
 import { ConflictError, DatabaseError, NotFoundError } from '../utils/errors.js';
 import type { Logger } from '../types/logger.js';
 

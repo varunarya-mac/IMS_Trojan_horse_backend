@@ -8,8 +8,7 @@ import { DisciplineRepository, DisciplineTypeRepository } from '../repositories/
 import { AlarmFlowRepository } from '../repositories/alarm-flow.repository.js';
 import { ClassRepository, FieldRepository } from '../repositories/class.repository.js';
 import type { ImportSummaryDTO, ImportErrorDetail } from '../types/dtos.js';
-import { stringifyProgramModules } from '../types/program-modules.js';
-import { ImportError as ImportErrorClass, ConflictError, DatabaseError } from '../utils/errors.js';
+import { ConflictError, DatabaseError } from '../utils/errors.js';
 import type { Logger } from '../types/logger.js';
 import { createNoOpLogger } from '../types/logger.js';
 
@@ -181,7 +180,7 @@ export class ImportService {
     parsed: ParsedConfig,
     result: ImportResult,
     idMapping: IdMapping,
-    overwriteExisting: boolean
+    _overwriteExisting: boolean
   ): Promise<void> {
     this.logger.log(`[ImportService] Phase 2: Importing ${parsed.disciplineTypes.length} discipline types`);
 
@@ -368,7 +367,7 @@ export class ImportService {
     parsed: ParsedConfig,
     result: ImportResult,
     idMapping: IdMapping,
-    overwriteExisting: boolean
+    _overwriteExisting: boolean
   ): Promise<void> {
     this.logger.log(`[ImportService] Phase 5: Importing ${parsed.fields.length} fields`);
 

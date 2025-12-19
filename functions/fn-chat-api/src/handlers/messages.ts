@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import type { FunctionContext, RouteParams } from '../types.js';
 import { getAuthenticatedUserId } from '../types.js';
-import { sendSuccess, sendError, sendHandledError, parseBody } from '../utils/response.js';
+import { sendSuccess, sendHandledError, parseBody } from '../utils/response.js';
 import { checkQuestionGuardrail, checkCSVGuardrail } from '../middleware/guardrails.js';
 import { ChatService } from '@lib/services/chat.service.js';
 import { MessageRepository } from '@lib/repositories/message.repository.js';
